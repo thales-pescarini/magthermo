@@ -10,7 +10,8 @@ from scipy.special import ndtr, log_ndtr
 from scipy.stats import qmc
 
 ROOT=Path(__file__).resolve().parents[1]
-BASE=Path(__import__('json').loads((ROOT/'config/BASE_DEPENDENCY.json').read_text())['root'])
+from environment import base_root
+BASE=base_root()
 SMAX=math.log(2.5)
 DMIN=5.
 TOTAL_VOLUME=1e-18

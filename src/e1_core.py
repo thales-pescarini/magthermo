@@ -10,11 +10,11 @@ import sys,math,json,collections
 import numpy as np
 import mpmath as mp
 from scipy.optimize import linear_sum_assignment,root
-sys.path.append(str(Path(__file__).resolve().parents[1].parent/'STAGE6_E1_WP0_WP1_2026-10-22/src'))
+from environment import base_root
 import gate1_verified_methods as gate
 
 ROOT=Path(__file__).resolve().parents[1]
-BASE=Path(__import__('json').loads((ROOT/'config/BASE_DEPENDENCY.json').read_text())['root'])
+BASE=base_root()
 sys.path.insert(0,str(BASE/'legacy_discrete/src'))
 import s5_model as legacy
 from population_protocol import haar_orientations,high_precision_row
