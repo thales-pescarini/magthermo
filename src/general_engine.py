@@ -36,13 +36,18 @@ class GeneralTape(GeometryTape):
         self.use_prefix_cache=bool(use_prefix_cache)
         self.prefix_geometry_reuse=dict(reused=False,occupations_reused=False)
         self.minimum_branch_proofs=[]
+        self.reference_partition_failures=[]
+        self._reference_attempt_active=False
+        self._minimum_retry_active=False
 
     def prefix_geometry_key(self, preparation_graph):
         # A complete event geometry chronology is common to P12 and P24.
         # R and its exact preparation metadata remain in this key even at B=0.
         value=dict(kind='E_GEOMETRY_PREFIX_V1',s=self.s,c=self.c,R=self.R,R_metadata=self.Rspec,
                    TM=0,event_T_C=self.event_T_C,protocols=self.protocols,resolution=self.level,
-                   reference_only=self.reference_only,preparation_graph=spectral_graph_key(preparation_graph))
+                   reference_only=self.reference_only,
+                   partition_policy='reference_first_minimum_recovery_after_failure',
+                   preparation_graph=spectral_graph_key(preparation_graph))
         return hashlib.sha256(json.dumps(core.plain(value),sort_keys=True,separators=(',',':')).encode()).hexdigest()
 
     def restore_geometry_prefix(self, cached, key):
@@ -55,6 +60,7 @@ class GeneralTape(GeometryTape):
         self.critical_catalog.extend(restored['critical_catalog'])
         self.event_solutions.update(restored['event_solutions'])
         self.minimum_branch_proofs.extend(restored['minimum_branch_proofs'])
+        self.reference_partition_failures.extend(restored.get('reference_partition_failures',[]))
         for check in restored['field_connection_checks']:
             check['verification_reused_for_identical_geometry_prefix']=True
             self.field_connection_checks.append(check)
@@ -83,6 +89,7 @@ class GeneralTape(GeometryTape):
         bank[key]=copy.deepcopy(dict(actions=self.actions,events=self.events,trace=self.trace,
             initial_p=self.initial_p,final_land=land,critical_catalog=self.critical_catalog,
             event_solutions=self.event_solutions,minimum_branch_proofs=self.minimum_branch_proofs,
+            reference_partition_failures=self.reference_partition_failures,
             field_connection_checks=self.field_connection_checks,maximum_alignment_distance=self.maximum_alignment_distance,
             alignment_calls=self.alignment_calls,prefix_wall_s=time.monotonic()-started,source_protocol=protocol))
         while len(bank)>8:bank.pop(next(iter(bank)))
@@ -141,7 +148,7 @@ class GeneralTape(GeometryTape):
         try:
             return super().landscape(T,B,previous,force)
         except core.Unresolved as original:
-            if self.reference_only or previous is None or force or str(original)!='STATIONARY_EVENT_CANDIDATE':
+            if self.reference_only or self._reference_attempt_active or previous is None or force or str(original)!='STATIONARY_EVENT_CANDIDATE':
                 raise
             start=time.monotonic()
             try:
@@ -167,7 +174,7 @@ class GeneralTape(GeometryTape):
         try:
             return super().align(source,target,occupation)
         except core.Unresolved as original:
-            if self.reference_only or str(original)!='IDENTITY_CONTINUATION_REQUIRES_EVENT':raise
+            if self.reference_only or self._reference_attempt_active or str(original)!='IDENTITY_CONTINUATION_REQUIRES_EVENT':raise
             T=target['identity']['T_C'];B=self.R@np.asarray(target['identity']['B_crystal_T'])
             try:
                 points,proof=self.track_minima(T,B,source)
@@ -180,9 +187,104 @@ class GeneralTape(GeometryTape):
                 return P
             except (core.Unresolved,ValueError,ZeroDivisionError):raise original
 
+    def verify_minimum_recovery(self,old,T,B):
+        """Require continued positive minima and an independent complete end census."""
+        points,proof=self.track_minima(T,B,old)
+        fresh=landscape.enumerate_land(self.pm(T,B),self.census_levels(T,B))
+        if fresh['status']!='COMPUTED_VALID' or len(fresh['minima'])!=len(points):
+            raise core.Unresolved('E_RECOVERY_CHANGES_OCCUPATIONAL_STATE_COUNT')
+        U=np.array([p['m'] for p in points]);V=np.array([p['m'] for p in fresh['minima']])
+        D=np.linalg.norm(U[:,None]-V[None,:],axis=2);a,b=linear_sum_assignment(D)
+        if len(a)!=len(points) or max(D[a,b],default=0.)>1e-6:
+            raise core.Unresolved('E_RECOVERY_MINIMUM_NOT_IN_INDEPENDENT_CENSUS')
+        proof.update(independent_end_census_counts=fresh['counts'],
+                     scope='finite verification of each original minimum and complete end census; not uniform exclusion of intermediate bifurcations')
+        return proof
+
+    @staticmethod
+    def nonminimum_fold_hint(hint):
+        critical=hint.get('critical',{})
+        if critical.get('kind')!='fold_stationary_KKT':return False
+        values=np.asarray(critical.get('eigenvalues',[]),float)
+        if values.shape!=(2,) or not np.all(np.isfinite(values)):return False
+        other=values[np.argmax(abs(values))]
+        return other<0 and min(abs(values))<=max(1e-4,1e-6*abs(other))
+
+    def advance(self,p,old,T0,B0,T1,B1,seconds,label,depth=0):
+        """Use complete reference partitions before attempting minimum recovery.
+
+        A failed full event producer is kept as evidence, then its uncommitted
+        actions are rolled back. Recovery solves the existing equations and
+        never relaxes the minimum/state-map guards or changes a probability.
+        """
+        if self.reference_only or self._reference_attempt_active or self._minimum_retry_active:
+            return super().advance(p,old,T0,B0,T1,B1,seconds,label,depth)
+        token=self.transaction_token();events_at=len(self.events);trace_at=len(self.trace)
+        steps_at=self.steps;catalog_at=list(self.critical_catalog);input_p=np.array(p,copy=True)
+        original_error=None
+        self._reference_attempt_active=True
+        try:
+            return super().advance(p,old,T0,B0,T1,B1,seconds,label,depth)
+        except core.Unresolved as exc:
+            if str(exc) not in {
+                'LATERAL_ROOT_CONTINUATION_UNRESOLVED','FINITE_LATERAL_ANCHORS_EXHAUSTED',
+                'B2_LATERAL_24_STEP_CAP','CRITICAL_ROOT_NOT_RESOLVED',
+                'EVENT_HAS_NO_DEMONSTRATED_SIGNED_CURVATURE_BRACKET',
+            }:raise
+            original_error=exc
+        finally:
+            self._reference_attempt_active=False
+        failure=dict(reason=str(original_error),T_segment=[float(T0),float(T1)],
+                     B_segment_T=[np.asarray(B0),np.asarray(B1)],label=label,
+                     failed_events=copy.deepcopy(self.events[events_at:]),
+                     diagnostic=copy.deepcopy(getattr(self,'diagnostic',None)),
+                     recovery_accepted=False)
+        self.reference_partition_failures.append(failure)
+        try:
+            proof=self.verify_minimum_recovery(old,T1,B1)
+        except (core.Unresolved,ValueError,ZeroDivisionError) as guard:
+            failure['recovery_guard_failure']=str(guard)
+            raise original_error
+        self.rollback_transaction(token)
+        del self.events[events_at:];del self.trace[trace_at:];self.steps=steps_at
+        # Only an already identified maximum/saddle fold may be bypassed in
+        # this bounded retry. A minimum/saddle hint remains compulsory.
+        B0=np.asarray(B0);B1=np.asarray(B1)
+        removed=[];retained=[]
+        for hint in catalog_at:
+            inside=(T0!=T1 and min(T0,T1)<hint['T_C']<max(T0,T1)
+                    and np.array_equal(B0,B1)
+                    and np.linalg.norm(np.asarray(hint['B_sample_T'])-B0)<1e-15)
+            (removed if inside and self.nonminimum_fold_hint(hint) else retained).append(hint)
+        self.critical_catalog=retained;self.pending_critical_hint=None
+        self.minimum_branch_proofs.append(proof)
+        self._minimum_retry_active=True
+        try:
+            result=super().advance(input_p,old,T0,B0,T1,B1,seconds,label,depth)
+            failure.update(recovery_accepted=True,minimum_branch_proof=proof,
+                           omitted_nonminimum_hint_count=len(removed),
+                           occupations_reused=False,physical_transport_law_changed=False)
+            return result
+        except Exception as exc:
+            failure['recovery_retry_failure']=str(exc)
+            raise
+        finally:
+            self._minimum_retry_active=False
+            for hint in removed:
+                if not any(hint is present for present in self.critical_catalog):self.critical_catalog.append(hint)
+
+    def failure_evidence(self):
+        return dict(actions=self.actions,events=self.events,initial_p=self.initial_p,
+                    geometry_cost_s=self.cost,diagnostic=getattr(self,'diagnostic',None),
+                    minimum_branch_proofs=self.minimum_branch_proofs,
+                    reference_partition_failures=self.reference_partition_failures,
+                    scope='geometry producer failure; any recorded probabilities are placeholders, never reused magnetic occupations')
+
     def compile(self,protocol='P12'):
         result=super().compile(protocol)
         result['minimum_branch_proofs']=self.minimum_branch_proofs
+        result['reference_partition_failures']=self.reference_partition_failures
+        result['partition_policy']='reference_first_minimum_recovery_after_failure'
         result['reference_only']=self.reference_only
         result['prefix_geometry_reuse']=self.prefix_geometry_reuse
         return result
