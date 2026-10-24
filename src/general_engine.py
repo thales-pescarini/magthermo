@@ -12,6 +12,9 @@ import time
 import numpy as np
 import e1_core as core
 import thermal_executor as thermal
+import r1_landscape as landscape
+import g1_geometry as geometry
+from scipy.optimize import linear_sum_assignment
 from factorized_executor import GeometryTape, SharedCaches
 from wp1c_spectral import spectral_F, observer
 
@@ -26,9 +29,108 @@ def spectral_graph_key(graph):
 
 
 class GeneralTape(GeometryTape):
-    def __init__(self, *args, event_T_C, **kwargs):
+    def __init__(self, *args, event_T_C, reference_only=False, **kwargs):
         super().__init__(*args, **kwargs)
         self.event_T_C = float(event_T_C)
+        self.reference_only=reference_only
+        self.minimum_branch_proofs=[]
+
+    def track_minima(self,T,B,old):
+        """Continue occupational states, independently of unrelated maxima.
+
+        This is stationary-equation continuation with positive tangent
+        curvature at prescribed parameter subdivisions. It is not matching
+        by energy or nearest directions alone. Any min loss, duplication,
+        index change or unresolved solve returns to the full event handler.
+        """
+        T0=old['identity']['T_C']
+        B0=self.R@np.asarray(old['identity']['B_crystal_T'])
+        B=np.asarray(B,float)
+        steps=max(1,math.ceil(abs(T-T0)/.25),math.ceil(np.linalg.norm(B-B0)/(5e-5/32)))
+        if steps>128:raise core.Unresolved('E_MINIMUM_TRACKING_SUBDIVISION_LIMIT')
+        points=[dict(p) for p in old['minima']]
+        initial=np.array([p['m'] for p in points]);minimum_curvature=math.inf;max_move=0.
+        for step in range(1,steps+1):
+            f=step/steps;pm=self.pm(T0+f*(T-T0),B0+f*(B-B0))
+            U=np.array([p['m'] for p in points]);u,ok=landscape.batch_newton(pm,U)
+            changed=[]
+            for i,p in enumerate(points):
+                q=None
+                if ok[i]:
+                    try:q=landscape.point(pm,u[i])
+                    except core.Unresolved:pass
+                if q is None:
+                    sep=min((np.linalg.norm(U[i]-v) for j,v in enumerate(U) if j!=i),default=2.)
+                    for dps in [85,120]:
+                        try:q=geometry.refine_kkt(pm,p['m'],dps,maximum_move=min(.1,.25*sep));break
+                        except (ValueError,ZeroDivisionError,core.Unresolved):pass
+                if q is None or q['index']!=0 or not q['morse']:
+                    raise core.Unresolved('E_MINIMUM_BRANCH_NOT_PRESERVED_REQUIRES_EVENT')
+                move=float(np.linalg.norm(q['m']-U[i]));max_move=max(max_move,move)
+                if move>=.1:raise core.Unresolved('E_MINIMUM_BRANCH_TRAVEL_REQUIRES_EVENT')
+                minimum_curvature=min(minimum_curvature,min(q['eig']))
+                changed.append(dict(q,point_id=p['point_id']))
+            final=np.array([q['m'] for q in changed])
+            if any(np.linalg.norm(final[i]-final[j])<=1e-6 for i in range(len(final)) for j in range(i)):
+                raise core.Unresolved('E_MINIMUM_BRANCH_MERGE_REQUIRES_EVENT')
+            points=changed
+        proof=dict(method='stationary-equation continuation of every minimum, positive tangent Hessian and distinct branches at parameter subdivisions',
+                   T_start_C=T0,T_end_C=float(T),B_start_sample_T=B0,B_end_sample_T=B,
+                   subdivisions=steps,minimum_positive_curvature=float(minimum_curvature),
+                   maximum_single_step_direction_change=max_move,initial_minima=initial,
+                   final_minima=np.array([p['m'] for p in points]),
+                   occupational_states_removed=0,physical_transport_law_changed=False,
+                   qualification='finite branch verification; not uniform bifurcation exclusion')
+        return points,proof
+
+    def landscape(self,T,B,previous=None,force=False):
+        try:
+            return super().landscape(T,B,previous,force)
+        except core.Unresolved as original:
+            if self.reference_only or previous is None or force or str(original)!='STATIONARY_EVENT_CANDIDATE':
+                raise
+            start=time.monotonic()
+            try:
+                minima,proof=self.track_minima(T,B,previous)
+                pm=self.pm(T,B)
+                fresh=landscape.enumerate_land(pm,self.census_levels(T,B))
+                if fresh['status']!='COMPUTED_VALID' or len(fresh['minima'])!=len(minima):
+                    raise core.Unresolved('E_INDEPENDENT_CENSUS_NOT_SAME_OCCUPATIONAL_STATES')
+                U=np.array([p['m'] for p in minima]);V=np.array([p['m'] for p in fresh['minima']])
+                a,b=linear_sum_assignment(np.linalg.norm(U[:,None]-V[None,:],axis=2))
+                if max(np.linalg.norm(U[a]-V[b],axis=1))>1e-6:
+                    raise core.Unresolved('E_TRACKED_MINIMUM_NOT_IN_INDEPENDENT_CENSUS')
+                proof['new_census_counts']=fresh['counts'];proof['previous_census_counts']=previous.get('counts')
+                fresh['E_minimum_branch_proof']=proof
+                self.minimum_branch_proofs.append(proof)
+                self.cache[self.key(T,B)]=fresh
+                self.cost['landscapes']+=time.monotonic()-start
+                return fresh
+            except (core.Unresolved,ValueError,ZeroDivisionError):
+                raise original
+
+    def align(self,source,target,occupation=None):
+        try:
+            return super().align(source,target,occupation)
+        except core.Unresolved as original:
+            if self.reference_only or str(original)!='IDENTITY_CONTINUATION_REQUIRES_EVENT':raise
+            T=target['identity']['T_C'];B=self.R@np.asarray(target['identity']['B_crystal_T'])
+            try:
+                points,proof=self.track_minima(T,B,source)
+                U=np.array([p['m'] for p in points]);V=np.array([p['m'] for p in target['minima']])
+                if len(U)!=len(V):raise core.Unresolved('E_STATE_COUNT_CHANGED_REQUIRES_EVENT')
+                D=np.linalg.norm(U[:,None]-V[None,:],axis=2);a,b=linear_sum_assignment(D)
+                if max(D[a,b])>1e-6:raise core.Unresolved('E_BRANCH_ASSOCIATION_UNRESOLVED')
+                P=np.zeros((len(V),len(U)));P[b,a]=1.
+                self.minimum_branch_proofs.append(proof)
+                return P
+            except (core.Unresolved,ValueError,ZeroDivisionError):raise original
+
+    def compile(self,protocol='P12'):
+        result=super().compile(protocol)
+        result['minimum_branch_proofs']=self.minimum_branch_proofs
+        result['reference_only']=self.reference_only
+        return result
 
     def run(self, protocol, prefix=None, on_prefix=None):
         if prefix is not None:
