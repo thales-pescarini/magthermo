@@ -103,7 +103,7 @@ def census(pm,n,extra=True):
     return dict(raw,points=fixed,counts=counts,euler=counts[0]-counts[1]+counts[2],all_morse=all(p['morse'] for p in fixed),
         geometric_correction='same seeded census candidates, corrected before acceptance; G1 exact algebra only when conditions hold')
 
-def continuous_points(pm,old):
+def _continuous_points_reference(pm,old):
     if geom.applicable(pm) and all(p.get('analytic_branch') for p in old):
         reference=geom.algebra(pm);bybranch={p['analytic_branch']:p for p in reference}
         if len(reference)!=len(old) or set(bybranch)!={p['analytic_branch'] for p in old}:
@@ -125,6 +125,44 @@ def continuous_points(pm,old):
     same=all(a['index']==b['index'] and b['morse'] for a,b in zip(old,pts))
     travel=float(np.max(np.linalg.norm(u-np.array([p['m'] for p in old]),axis=1)))
     return pts,bool(np.all(ok) and unique and same and travel<.15)
+
+
+def continuous_points(pm,old):
+    """Reference continuation, then bounded same-branch MP KKT recovery.
+
+    An unsuccessful binary64 Newton iterate is never treated as a root. The
+    fallback solves the same stationary equations from every previous root;
+    indices, pairwise uniqueness and travel must all survive. A lost/born
+    state still requests the approved event transport, with no reset/split.
+    """
+    points,valid=_continuous_points_reference(pm,old)
+    if valid or geom.applicable(pm):return points,valid
+    previous=np.array([p['m'] for p in old]);corrected=[]
+    core.COUNTS['E_MP_continuation_fallback_calls']+=1
+    for i,p in enumerate(old):
+        separation=min((np.linalg.norm(previous[i]-v) for j,v in enumerate(previous) if j!=i),default=2.)
+        maximum_move=min(.1,.25*separation)
+        for dps in [85,120]:
+            try:
+                q=geom.refine_kkt(pm,p['m'],dps,maximum_move=maximum_move)
+                if q['index']!=p['index'] or not q['morse']:
+                    raise core.Unresolved('E_MP_CONTINUATION_INDEX_CHANGED_REQUIRES_EVENT')
+                q=dict(q,point_id=p.get('point_id',f'cp{i:03d}'),
+                       E_continuation_corrector='same polynomial KKT; previous-root seed; bounded by quarter root separation',
+                       E_maximum_move=maximum_move)
+                corrected.append(q)
+                break
+            except (ValueError,ZeroDivisionError,core.Unresolved):
+                pass
+        else:
+            core.COUNTS['E_MP_continuation_fallback_unresolved']+=1
+            return points,False
+    U=np.array([q['m'] for q in corrected])
+    unique=all(np.linalg.norm(U[i]-U[j])>1e-6 for i in range(len(U)) for j in range(i))
+    travel=float(np.max(np.linalg.norm(U-previous,axis=1)))
+    accepted=unique and travel<.15
+    core.COUNTS['E_MP_continuation_fallback_accepted']+=int(accepted)
+    return corrected,bool(accepted)
 
 def _flow_r3(pm,start,minima,rtol=1e-9):
     """Same negative-gradient path, Radau for soft/stiff curvature.

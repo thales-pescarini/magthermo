@@ -121,7 +121,7 @@ def canonical_from_candidate(pm,u,maximum_move=1e-4):
     if move>maximum_move:raise core.Unresolved('G1_CANONICAL_CORRECTION_TOO_LARGE:'+str(move))
     return dict(p,m=np.array(p['m'],copy=True),canonical_correction_from_candidate=move)
 
-def refine_kkt(pm,u,dps=85):
+def refine_kkt(pm,u,dps=85,maximum_move=1e-4):
     if dps not in [85,120]:raise ValueError('TWO_AUTHORIZED_PRECISION_LEVELS_ONLY')
     core.COUNTS['bounded_KKT_MP_calls_'+str(dps)]+=1
     with mp.workdps(dps):
@@ -140,7 +140,7 @@ def refine_kkt(pm,u,dps=85):
         # findroot's multidimensional verification squares the residual norm.
         sol=mp.findroot(F,tuple(v)+((v.T*g)[0]/sc,),J=J,tol=mp.mpf(10)**(-2*(dps-20)),maxsteps=100)
         point=mp_point(pm,sol[:3],dps);move=float(np.linalg.norm(point['m']-np.asarray(u)))
-        if move>1e-4:raise core.Unresolved('G1_KKT_CORRECTION_BRANCH_AMBIGUOUS:'+str(move))
+        if move>maximum_move:raise core.Unresolved('G1_KKT_CORRECTION_BRANCH_AMBIGUOUS:'+str(move))
         point['KKT_seed_direction_change']=move
         return point
 
