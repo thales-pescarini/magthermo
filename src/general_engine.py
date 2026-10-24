@@ -233,6 +233,8 @@ def prepare_response(tape, d_nm, R, progress=None):
                 thermal.checked(prefix[model], 'E_prefix_'+model)
             else:
                 current[model] = U @ current[model]
+                if not np.all(np.isfinite(current[model])):
+                    raise core.Unresolved('NONFINITE_COMPOSED_MAP')
                 error = float(np.max(abs(current[model].sum(axis=0)-1)))
                 if error > 2e-11 or np.min(current[model]) < -2e-11:
                     raise core.Unresolved('COMPOSED_MAP_INVARIANTS_UNRESOLVED')
@@ -257,5 +259,7 @@ def evaluate_duration(prepared, ell):
         p = U @ prepared['prefix'][model]
         thermal.checked(p, 'E_duration_'+model)
         results[model] = np.array([A @ p for A in prepared['readouts'][model]])
+        if not np.all(np.isfinite(results[model])):
+            raise core.Unresolved('NONFINITE_READOUT')
     return results, dict(marginal_duration_s=time.monotonic()-start, ell=ell,
                          F_all_modes=True, separate_occupations=True)

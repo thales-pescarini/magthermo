@@ -7,6 +7,7 @@ from pathlib import Path
 import os
 for k in ['OPENBLAS_NUM_THREADS','OMP_NUM_THREADS','MKL_NUM_THREADS','VECLIB_MAXIMUM_THREADS','NUMEXPR_NUM_THREADS']:os.environ[k]='1'
 import sys,math,json,collections
+sys.dont_write_bytecode=True
 import numpy as np
 import mpmath as mp
 from scipy.optimize import linear_sum_assignment,root

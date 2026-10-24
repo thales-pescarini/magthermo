@@ -19,6 +19,7 @@ CODE_HASH=hashlib.sha256(b''.join((ROOT/'src'/p).read_bytes() for p in ['e1_core
 S=4.884610123479026e-13
 
 def checked(p,context):
+    if not np.all(np.isfinite(p)):raise core.Unresolved('NONFINITE_PROBABILITY:'+context)
     p=np.asarray(p,float);res=float(p.sum()-1);minimum=float(np.min(p))
     if abs(res)>1e-12 or minimum< -1e-12:raise core.Unresolved('PROBABILITY_CONSERVATION_FAILURE:'+context+':'+str((res,minimum)))
     return dict(context=context,mass_residual_before_correction=res,minimum_probability=minimum,correction_applied=False)
