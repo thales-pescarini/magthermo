@@ -29,11 +29,65 @@ def spectral_graph_key(graph):
 
 
 class GeneralTape(GeometryTape):
-    def __init__(self, *args, event_T_C, reference_only=False, **kwargs):
+    def __init__(self, *args, event_T_C, reference_only=False, use_prefix_cache=True, **kwargs):
         super().__init__(*args, **kwargs)
         self.event_T_C = float(event_T_C)
         self.reference_only=reference_only
+        self.use_prefix_cache=bool(use_prefix_cache)
+        self.prefix_geometry_reuse=dict(reused=False,occupations_reused=False)
         self.minimum_branch_proofs=[]
+
+    def prefix_geometry_key(self, preparation_graph):
+        # A complete event geometry chronology is common to P12 and P24.
+        # R and its exact preparation metadata remain in this key even at B=0.
+        value=dict(kind='E_GEOMETRY_PREFIX_V1',s=self.s,c=self.c,R=self.R,R_metadata=self.Rspec,
+                   TM=0,event_T_C=self.event_T_C,protocols=self.protocols,resolution=self.level,
+                   reference_only=self.reference_only,preparation_graph=spectral_graph_key(preparation_graph))
+        return hashlib.sha256(json.dumps(core.plain(value),sort_keys=True,separators=(',',':')).encode()).hexdigest()
+
+    def restore_geometry_prefix(self, cached, key):
+        restored=copy.deepcopy(cached)
+        if not np.array_equal(self.initial_p,restored['initial_p']):
+            raise core.Unresolved('PREFIX_PREPARATION_DIFFERENCE')
+        self.actions.extend(restored['actions'])
+        self.events.extend(restored['events'])
+        self.trace.extend(restored['trace'])
+        self.critical_catalog.extend(restored['critical_catalog'])
+        self.event_solutions.update(restored['event_solutions'])
+        self.minimum_branch_proofs.extend(restored['minimum_branch_proofs'])
+        for check in restored['field_connection_checks']:
+            check['verification_reused_for_identical_geometry_prefix']=True
+            self.field_connection_checks.append(check)
+        self.maximum_alignment_distance=max(self.maximum_alignment_distance,restored['maximum_alignment_distance'])
+        # These probabilities only check the dimensions of geometry maps. No
+        # magnetic occupation propagated for a previous d/history is loaded.
+        p=self.initial_p.copy()
+        for action in restored['actions']:
+            if action['kind']=='map':
+                p=action['matrix']@p
+                thermal.checked(p,'replayed_geometry_map_placeholder')
+        self.steps+=sum(a['kind']=='operator' for a in restored['actions'])
+        self.readings=[dict(label='NRM',geometry_only_placeholder=True)]
+        land=restored['final_land']
+        self.cache[self.key(self.protocols['preparation']['temperature_C'],np.zeros(3))]=land
+        self.prefix_geometry_reuse=dict(reused=True,key=key,source_protocol=restored['source_protocol'],
+             physical_actions=len(restored['actions']),source_prefix_wall_s=restored['prefix_wall_s'],
+             avoided_alignment_calls=restored['alignment_calls'],occupations_reused=False,
+             laboratory_sequence_reused=False,all_F_modes_retained=True)
+        return p,land
+
+    def store_geometry_prefix(self, key, land, started, protocol):
+        bank=getattr(self.shared,'E_geometry_prefixes',None)
+        if bank is None:
+            bank={};self.shared.E_geometry_prefixes=bank
+        bank[key]=copy.deepcopy(dict(actions=self.actions,events=self.events,trace=self.trace,
+            initial_p=self.initial_p,final_land=land,critical_catalog=self.critical_catalog,
+            event_solutions=self.event_solutions,minimum_branch_proofs=self.minimum_branch_proofs,
+            field_connection_checks=self.field_connection_checks,maximum_alignment_distance=self.maximum_alignment_distance,
+            alignment_calls=self.alignment_calls,prefix_wall_s=time.monotonic()-started,source_protocol=protocol))
+        while len(bank)>8:bank.pop(next(iter(bank)))
+        self.prefix_geometry_reuse=dict(reused=False,key=key,occupations_reused=False,
+                                       laboratory_sequence_reused=False,all_F_modes_retained=True)
 
     def track_minima(self,T,B,old):
         """Continue occupational states, independently of unrelated maxima.
@@ -130,6 +184,7 @@ class GeneralTape(GeometryTape):
         result=super().compile(protocol)
         result['minimum_branch_proofs']=self.minimum_branch_proofs
         result['reference_only']=self.reference_only
+        result['prefix_geometry_reuse']=self.prefix_geometry_reuse
         return result
 
     def run(self, protocol, prefix=None, on_prefix=None):
@@ -146,14 +201,20 @@ class GeneralTape(GeometryTape):
         thermal.checked(p, 'E_preparation')
         self.initial_p = p.copy()
         self.readings = []
-        p, land = self.ramp(p, land, T0, zero, T0, field, event['field_on_ramp_seconds'], 'field_on')
-        p, land = self.ramp(p, land, T0, field, T, field, (T-T0) / event['heating_rate_C_per_second'], 'event_heating')
-        # Placeholder duration is replaced only at the explicit hold action.
-        p = self.hold(p, land, T, 1., 'event_hold')
-        p, land = self.ramp(p, land, T, field, T0, field, (T-T0) / event['cooling_rate_C_per_second'], 'event_cooling')
-        p, land = self.ramp(p, land, T0, field, T0, zero, event['field_off_ramp_seconds'], 'field_off')
-        p = self.hold(p, land, T0, event['final_zero_field_wait_seconds'], 'event_wait')
-        self.readings.append(self.read(p, land, 'NRM'))
+        started=time.monotonic();prefix_key=self.prefix_geometry_key(land)
+        cached=getattr(self.shared,'E_geometry_prefixes',{}).get(prefix_key) if self.use_prefix_cache else None
+        if cached is not None:
+            p,land=self.restore_geometry_prefix(cached,prefix_key)
+        else:
+            p, land = self.ramp(p, land, T0, zero, T0, field, event['field_on_ramp_seconds'], 'field_on')
+            p, land = self.ramp(p, land, T0, field, T, field, (T-T0) / event['heating_rate_C_per_second'], 'event_heating')
+            # Placeholder duration is replaced only at the explicit hold action.
+            p = self.hold(p, land, T, 1., 'event_hold')
+            p, land = self.ramp(p, land, T, field, T0, field, (T-T0) / event['cooling_rate_C_per_second'], 'event_cooling')
+            p, land = self.ramp(p, land, T0, field, T0, zero, event['field_off_ramp_seconds'], 'field_off')
+            p = self.hold(p, land, T0, event['final_zero_field_wait_seconds'], 'event_wait')
+            self.readings.append(self.read(p, land, 'NRM'))
+            if self.use_prefix_cache:self.store_geometry_prefix(prefix_key,land,started,protocol)
         for plateau in lab[protocol]['plateaus_C']:
             temperature = float(plateau)
             p, land = self.ramp(p, land, T0, zero, temperature, zero, (temperature-T0) / lab['heating_rate_C_per_second'], 'lab_heat_'+str(plateau))
