@@ -1,0 +1,75 @@
+preparation:
+  temperature_C: 20.0
+  field_T:
+  - 0.0
+  - 0.0
+  - 0.0
+  rule: maximal_projection_on_sample_positive_z
+  exact_ties: equal_occupations
+event:
+  field_T:
+  - 5.0e-05
+  - 0.0
+  - 0.0
+  field_on_ramp_seconds: 1.0
+  heating_rate_C_per_second: 0.3333333333333333
+  cooling_rate_C_per_second: 0.3333333333333333
+  hold_seconds: 10**ell
+  field_off_ramp_seconds: 1.0
+  final_temperature_C: 20.0
+  final_zero_field_wait_seconds: 120.0
+  include_all_ramps_in_forward: true
+laboratory:
+  field_T:
+  - 0.0
+  - 0.0
+  - 0.0
+  measurement_temperature_C: 20.0
+  heating_rate_C_per_second: 0.3333333333333333
+  cooling_rate_C_per_second: 0.3333333333333333
+  hold_seconds: 1200.0
+  wait_before_measurement_seconds: 120.0
+  sequential_state: true
+  P12:
+    include_NRM: true
+    plateaus_C:
+    - 30
+    - 50
+    - 70
+    - 90
+    - 110
+    - 130
+    - 160
+    - 200
+    - 250
+    - 300
+    - 350
+    observations: 12
+  P24:
+    include_NRM: true
+    plateaus_C:
+    - 30
+    - 40
+    - 50
+    - 60
+    - 70
+    - 80
+    - 90
+    - 100
+    - 110
+    - 120
+    - 130
+    - 140
+    - 150
+    - 160
+    - 175
+    - 190
+    - 210
+    - 230
+    - 250
+    - 275
+    - 300
+    - 325
+    - 350
+    observations: 24
+  separate_sequential_operator_per_protocol: true
