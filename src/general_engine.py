@@ -5,6 +5,8 @@ Geometrical tapes contain no magnetic propagation; duration changes only the
 event-hold propagator. Failed tapes are retained and cannot count as complete.
 """
 import copy
+import hashlib
+import json
 import math
 import time
 import numpy as np
@@ -12,6 +14,15 @@ import e1_core as core
 import thermal_executor as thermal
 from factorized_executor import GeometryTape, SharedCaches
 from wp1c_spectral import spectral_F, observer
+
+
+def spectral_graph_key(graph):
+    """Content identity survives serialization; field and ordered roots matter."""
+    identity = dict(physical=graph['identity'],
+                    minima=[dict(id=p.get('point_id'), m=p['m'], E=p.get('E_mp', p['E'])) for p in graph['minima']],
+                    channels=[dict(id=c.get('saddle_id'), endpoints=c['endpoints'], E=c.get('saddle_E_mp', c['saddle_E'])) for c in graph['channels']],
+                    canonical=graph.get('canonical_geometry_and_energy', False))
+    return hashlib.sha256(json.dumps(core.plain(identity), sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 
 
 class GeneralTape(GeometryTape):
@@ -75,7 +86,7 @@ def prepare_response(tape, d_nm, R, progress=None):
         kind = action['kind']
         if kind == 'operator':
             graph = action['graph']
-            key = (id(graph), action['T_C'])
+            key = (spectral_graph_key(graph), action['T_C'])
             if key not in cache:
                 t = time.monotonic()
                 sp = spectral_F(graph, d_nm, action['T_C'])
