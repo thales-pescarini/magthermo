@@ -29,12 +29,15 @@ def spectral_graph_key(graph):
 
 
 class GeneralTape(GeometryTape):
-    def __init__(self, *args, event_T_C, reference_only=False, use_prefix_cache=True, **kwargs):
+    def __init__(self, *args, event_T_C, reference_only=False, use_prefix_cache=True,
+                 use_laboratory_cache=True, **kwargs):
         super().__init__(*args, **kwargs)
         self.event_T_C = float(event_T_C)
         self.reference_only=reference_only
         self.use_prefix_cache=bool(use_prefix_cache)
+        self.use_laboratory_cache=bool(use_laboratory_cache)
         self.prefix_geometry_reuse=dict(reused=False,occupations_reused=False)
+        self.laboratory_geometry_reuse=dict(reused=False,occupations_reused=False)
         self.minimum_branch_proofs=[]
         self.reference_partition_failures=[]
         self._reference_attempt_active=False
@@ -95,6 +98,81 @@ class GeneralTape(GeometryTape):
         while len(bank)>8:bank.pop(next(iter(bank)))
         self.prefix_geometry_reuse=dict(reused=False,key=key,occupations_reused=False,
                                        laboratory_sequence_reused=False,all_F_modes_retained=True)
+
+    @staticmethod
+    def zero_field_segment(key):
+        return np.array_equal(np.asarray(key[1]),np.zeros(3)) and np.array_equal(np.asarray(key[3]),np.zeros(3))
+
+    def laboratory_geometry_key(self, land, p, protocol):
+        # Event temperature is deliberately absent: laboratory geometry begins
+        # at this exact ordered graph, with its own prescribed zero-field path.
+        # Keep the geometric placeholder and all relevant critical context too.
+        # It is never a propagated magnetic occupation or an input response.
+        zero_catalog=[h for h in self.critical_catalog
+                      if np.array_equal(np.asarray(h['B_sample_T']),np.zeros(3))]
+        zero_solutions=[(key,value) for key,value in sorted(self.event_solutions.items())
+                        if self.zero_field_segment(key)]
+        value=dict(kind='E_LABORATORY_GEOMETRY_V1',s=self.s,c=self.c,R=self.R,R_metadata=self.Rspec,
+                   TM=0,protocol=protocol,protocols=self.protocols,resolution=self.level,
+                   reference_only=self.reference_only,
+                   partition_policy='reference_first_minimum_recovery_after_failure',
+                   entry_graph=land,geometric_placeholder=p,
+                   zero_critical_catalog=zero_catalog,zero_event_solutions=zero_solutions)
+        return hashlib.sha256(json.dumps(core.plain(value),sort_keys=True,separators=(',',':')).encode()).hexdigest()
+
+    def laboratory_token(self):
+        fields=['actions','events','trace','readings','minimum_branch_proofs',
+                'reference_partition_failures','field_connection_checks']
+        return dict(lengths={name:len(getattr(self,name)) for name in fields},
+                    alignment_calls=self.alignment_calls,started=time.monotonic())
+
+    def store_laboratory_geometry(self, key, token, entry_p, land):
+        payload={name:getattr(self,name)[offset:] for name,offset in token['lengths'].items()}
+        payload.update(entry_placeholder=entry_p,final_land=land,
+            zero_critical_catalog=[h for h in self.critical_catalog
+                                   if np.array_equal(np.asarray(h['B_sample_T']),np.zeros(3))],
+            zero_event_solutions={k:v for k,v in self.event_solutions.items() if self.zero_field_segment(k)},
+            maximum_alignment_distance=self.maximum_alignment_distance,
+            alignment_calls=self.alignment_calls-token['alignment_calls'],
+            source_event_T_C=self.event_T_C,laboratory_wall_s=time.monotonic()-token['started'])
+        payload=copy.deepcopy(payload)  # Preserve graph/event aliases within the slice.
+        for event in payload['events']:
+            for name in ['occupation_before_map','occupation_after_map','probability_check']:event.pop(name,None)
+        payload['trace']=[{k:v for k,v in row.items() if k not in ['state','forked_probability']}
+                          for row in payload['trace']]
+        bank=getattr(self.shared,'E_laboratory_geometries',None)
+        if bank is None:
+            bank={};self.shared.E_laboratory_geometries=bank
+        bank[key]=payload
+        while len(bank)>8:bank.pop(next(iter(bank)))
+        self.laboratory_geometry_reuse=dict(reused=False,key=key,occupations_reused=False,
+                                            all_F_modes_retained=True)
+
+    def restore_laboratory_geometry(self, cached, key, p):
+        restored=copy.deepcopy(cached)
+        if not np.array_equal(p,restored['entry_placeholder']):
+            raise core.Unresolved('LABORATORY_GEOMETRIC_PLACEHOLDER_DIFFERENCE')
+        fresh_p=np.array(p,copy=True)
+        for action in restored['actions']:
+            if action['kind']=='map':
+                fresh_p=action['matrix']@fresh_p
+                thermal.checked(fresh_p,'replayed_laboratory_geometry_map_placeholder')
+        for name in ['actions','events','trace','readings','minimum_branch_proofs',
+                     'reference_partition_failures','field_connection_checks']:
+            getattr(self,name).extend(restored[name])
+        self.steps+=sum(a['kind']=='operator' for a in restored['actions'])
+        self.critical_catalog=[h for h in self.critical_catalog
+                               if not np.array_equal(np.asarray(h['B_sample_T']),np.zeros(3))]
+        self.critical_catalog.extend(restored['zero_critical_catalog'])
+        self.event_solutions.update(restored['zero_event_solutions'])
+        self.maximum_alignment_distance=max(self.maximum_alignment_distance,restored['maximum_alignment_distance'])
+        self.laboratory_geometry_reuse=dict(reused=True,key=key,
+            source_event_T_C=restored['source_event_T_C'],physical_actions=len(restored['actions']),
+            source_laboratory_wall_s=restored['laboratory_wall_s'],
+            avoided_alignment_calls=restored['alignment_calls'],occupations_reused=False,
+            entry_placeholder_scope='dimension and stochastic-map checks only; no magnetic state reused',
+            all_F_modes_retained=True)
+        return fresh_p,restored['final_land']
 
     def track_minima(self,T,B,old):
         """Continue occupational states, independently of unrelated maxima.
@@ -278,6 +356,8 @@ class GeneralTape(GeometryTape):
                     geometry_cost_s=self.cost,diagnostic=getattr(self,'diagnostic',None),
                     minimum_branch_proofs=self.minimum_branch_proofs,
                     reference_partition_failures=self.reference_partition_failures,
+                    prefix_geometry_reuse=self.prefix_geometry_reuse,
+                    laboratory_geometry_reuse=self.laboratory_geometry_reuse,
                     scope='geometry producer failure; any recorded probabilities are placeholders, never reused magnetic occupations')
 
     def compile(self,protocol='P12'):
@@ -287,6 +367,7 @@ class GeneralTape(GeometryTape):
         result['partition_policy']='reference_first_minimum_recovery_after_failure'
         result['reference_only']=self.reference_only
         result['prefix_geometry_reuse']=self.prefix_geometry_reuse
+        result['laboratory_geometry_reuse']=self.laboratory_geometry_reuse
         return result
 
     def run(self, protocol, prefix=None, on_prefix=None):
@@ -317,6 +398,13 @@ class GeneralTape(GeometryTape):
             p = self.hold(p, land, T0, event['final_zero_field_wait_seconds'], 'event_wait')
             self.readings.append(self.read(p, land, 'NRM'))
             if self.use_prefix_cache:self.store_geometry_prefix(prefix_key,land,started,protocol)
+        lab_key=self.laboratory_geometry_key(land,p,protocol)
+        use_lab=self.use_laboratory_cache and not self.reference_only
+        cached=getattr(self.shared,'E_laboratory_geometries',{}).get(lab_key) if use_lab else None
+        if cached is not None:
+            p,land=self.restore_laboratory_geometry(cached,lab_key,p)
+            return self.result('COMPUTED_VALID')
+        token=self.laboratory_token();entry_p=p.copy()
         for plateau in lab[protocol]['plateaus_C']:
             temperature = float(plateau)
             p, land = self.ramp(p, land, T0, zero, temperature, zero, (temperature-T0) / lab['heating_rate_C_per_second'], 'lab_heat_'+str(plateau))
@@ -324,6 +412,7 @@ class GeneralTape(GeometryTape):
             p, land = self.ramp(p, land, temperature, zero, T0, zero, (temperature-T0) / lab['cooling_rate_C_per_second'], 'lab_cool_'+str(plateau))
             p = self.hold(p, land, T0, lab['wait_before_measurement_seconds'], 'lab_wait_'+str(plateau))
             self.readings.append(self.read(p, land, str(plateau)))
+        if use_lab:self.store_laboratory_geometry(lab_key,token,entry_p,land)
         return self.result('COMPUTED_VALID')
 
 
