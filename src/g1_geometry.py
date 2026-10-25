@@ -177,11 +177,75 @@ def diagonal_plane_candidate(pm, u, dps=85, maximum_move=1e-4):
         return point
 
 
+def mirror_interior_candidate(pm,u,dps=85,maximum_move=1e-4):
+    """Same full stationary equations in v=2*x*y, w=z**2.
+
+    For exact zero field and Dxx=Dyy, Dxz=Dyz=0, the energy is
+    (K1+K2*w)*v**2/4 + K1*w*(1-w) + Dxx*(1-w)+Dxy*v+Dzz*w.
+    Its interior equations reduce to a cubic in w. A local MP derivative
+    check isolates one root, and the seed's three rotated-coordinate
+    signs remain separated from zero. Full3D MP checks remain compulsory.
+    """
+    if dps not in [85,120]:raise ValueError('TWO_AUTHORIZED_PRECISION_LEVELS_ONLY')
+    u=np.asarray(u,float);D=pm.D
+    if not (precision_supported(pm) and np.array_equal(pm.B,np.zeros(3))
+        and np.array_equal(pm.h,np.zeros(3)) and np.array_equal(D,D.T)
+        and D[0,0]==D[1,1] and D[0,2]==D[1,2]==0.):return None
+    with mp.workdps(dps):
+        seed=[mp.mpf(float(x)) for x in u];rt2=mp.sqrt(2)
+        plus=(seed[0]+seed[1])/rt2;minus=(seed[0]-seed[1])/rt2
+        radius=min(mp.mpf(maximum_move),abs(plus)/2,abs(minus)/2,abs(seed[2])/2)
+        if radius<=0:return None
+        k1,k2,dm,h=coefficients(pm);delta=dm[2,2]-dm[0,0];coupling=dm[0,1]
+        # [(K1+delta)-2*K1*w]*(K1+K2*w)^2+K2*Dxy^2=0.
+        coeff=[(k1+delta)*k1*k1+k2*coupling*coupling,
+               2*k1*k2*(k1+delta)-2*k1**3,
+               k2*k2*(k1+delta)-4*k1*k1*k2,-2*k1*k2*k2]
+        scale=max(mp.mpf(1),*(abs(x) for x in coeff))
+        def polynomial_w(w):return (coeff[0]+w*(coeff[1]+w*(coeff[2]+w*coeff[3])))/scale
+        def derivative(w):return (coeff[1]+w*(2*coeff[2]+3*w*coeff[3]))/scale
+        lo=max(mp.mpf(0),abs(seed[2])-radius)**2
+        hi=min(mp.mpf(1),abs(seed[2])+radius)**2
+        derivative_values=[derivative(lo),derivative(hi)]
+        if coeff[3]:
+            vertex=-coeff[2]/(3*coeff[3])
+            if lo<vertex<hi:derivative_values.append(derivative(vertex))
+        lower,upper=min(derivative_values),max(derivative_values)
+        sign_margin=mp.mpf(10)**(-dps+20)
+        if not (lower>sign_margin or upper<-sign_margin) or polynomial_w(lo)*polynomial_w(hi)>0:return None
+        w=mp.findroot(polynomial_w,seed[2]**2,df=derivative,solver='newton',
+                      tol=mp.mpf(10)**(-2*(dps-20)),maxsteps=100)
+        if not lo<=w<=hi or not 0<w<1:return None
+        denominator=k1+k2*w
+        if not denominator:return None
+        v=-2*coupling/denominator
+        q,r=(1-w+v)/2,(1-w-v)/2
+        if min(q,r)<=0:return None
+        a=mp.sign(plus)*mp.sqrt(q);b=mp.sign(minus)*mp.sqrt(r)
+        direction=[(a+b)/rt2,(a-b)/rt2,mp.sign(seed[2])*mp.sqrt(w)]
+        move_mp=mp.sqrt(mp.fsum((x-y)**2 for x,y in zip(direction,seed)))
+        if move_mp>radius:raise core.Unresolved('E_MIRROR_INTERIOR_CORRECTION_OUTSIDE_BOUND')
+        point=mp_point(pm,direction,dps,'mirror_interior_cubic')
+        point.update(geometry_source='E_mirror_interior_cubic_KKT',
+            KKT_seed_direction_change=float(move_mp),
+            reduced_stationary_cubic=dict(variable='w=z^2; v=2*x*y',
+                coefficients_ascending=[mp.nstr(x,dps) for x in coeff],
+                w=mp.nstr(w,dps),v=mp.nstr(v,dps),
+                local_unique_root=True,sign_preserving_radius=mp.nstr(radius,dps),
+                scaled_derivative_extrema_MP=[mp.nstr(lower,dps),mp.nstr(upper,dps)],
+                derivative_sign_margin=mp.nstr(sign_margin,dps),outward_rounded_interval_certificate=False),
+            full_three_dimensional_stationary_and_curvature_checks=True)
+        core.COUNTS['E_mirror_interior_corrections']+=1
+        return point
+
+
 def refine_kkt(pm,u,dps=85,maximum_move=1e-4):
     if dps not in [85,120]:raise ValueError('TWO_AUTHORIZED_PRECISION_LEVELS_ONLY')
     core.COUNTS['bounded_KKT_MP_calls_'+str(dps)]+=1
     diagonal=diagonal_plane_candidate(pm,u,dps,maximum_move)
     if diagonal is not None:return diagonal
+    interior=mirror_interior_candidate(pm,u,dps,maximum_move)
+    if interior is not None:return interior
     with mp.workdps(dps):
         k1,k2,D,h=coefficients(pm);v=mp.matrix([mp.mpf(float(x)) for x in u]);v/=mp.sqrt((v.T*v)[0]);_,g,_=polynomial(k1,k2,D,h,v)
         sc=max(mp.mpf(1),abs(k1),abs(k2),max(abs(x) for x in D),max(abs(x) for x in h))
