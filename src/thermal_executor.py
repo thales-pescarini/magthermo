@@ -111,6 +111,63 @@ def operator(land,T,d,seconds):
         generator_column_residual=qres,generator_detailed_balance_residual=dbres,
         channel_count=len(land['channels']),parallel_channels_summed=True)
 
+def lateral_root_continuation(model_at, anchor, start_fraction, target_fraction, critical_fraction,
+                              checkpoint=None, max_subdivision_depth=8, max_calls=256):
+    """Refine only a rejected stationary-parameter step on one Morse side.
+
+    Successful reference steps are unchanged. Failed Newton/MP candidates are
+    recorded but never consumed; subdivision keeps every existing root/index,
+    travel, uniqueness and curvature guard. No occupation or physical time is
+    advanced here, and the requested critical bracket is unchanged.
+    """
+    af, target, fc = map(float, (start_fraction, target_fraction, critical_fraction))
+    distance, requested = abs(af - fc), abs(target - fc)
+    if not all(math.isfinite(x) for x in (af, target, fc)) or not 0 < requested <= distance or (af - fc) * (target - fc) <= 0:
+        raise ValueError('INVALID_ONE_SIDED_LATERAL_CONTINUATION')
+    side, fractions = (-1 if af < fc else 1), []
+    for _ in range(23):
+        if distance <= 2 * requested:
+            break
+        distance /= 2
+        fractions.append(fc + side * distance)
+    if distance > 2 * requested:
+        raise core.Unresolved('B2_LATERAL_24_STEP_CAP')
+    fractions.append(target)
+    land, current, checks = anchor, af, []
+
+    def persist():
+        if checkpoint:
+            checkpoint(checks)
+
+    def visit(fraction, depth):
+        nonlocal land, current
+        if len(checks) >= max_calls:
+            raise core.Unresolved('LATERAL_ROOT_CONTINUATION_UNRESOLVED')
+        pm = model_at(fraction)
+        pts, okay = ls.continuous_points(pm, land['points'])
+        check = dict(fraction=fraction, from_fraction=current, subdivision_depth=depth, valid=okay,
+            counts=[sum(p['index'] == k for p in pts) for k in range(3)] if okay else None,
+            maximum_gradient_residual=max(p['gradient_residual'] for p in pts) if okay else None,
+            minimum_absolute_curvature=min(abs(v) for p in pts for v in p['eig']) if okay else None,
+            minimum_point_separation=min((np.linalg.norm(p['m'] - q['m']) for j, p in enumerate(pts) for q in pts[:j]), default=math.inf) if okay else None)
+        checks.append(check); persist()
+        if not okay:
+            middle = (current + fraction) / 2
+            if depth >= max_subdivision_depth or middle in (current, fraction):
+                raise core.Unresolved('LATERAL_ROOT_CONTINUATION_UNRESOLVED')
+            check['rejected_candidates_consumed'] = False
+            check['subdivision_scheduled'] = True; persist()
+            visit(middle, depth + 1)
+            visit(fraction, depth + 1)
+            return
+        land = ls.from_points(pm, pts, land)
+        current = fraction
+
+    for fraction in fractions:
+        visit(fraction, 0)
+    return land, checks
+
+
 class Executor:
     def __init__(self,case,resolution,protocols,checkpoint=None):
         self.case=case;self.level=resolution;self.protocols=protocols;self.s=case['s'];self.c=np.array(case['c_crystal_raw'],float);self.c/=np.linalg.norm(self.c)
@@ -331,23 +388,11 @@ class Executor:
             record['reason']='FINITE_LATERAL_ANCHORS_EXHAUSTED';persist();raise core.Unresolved(record['reason'])
         record['selected_anchor_offset']=offset
         def continue_side(anchor,f):
-            # A finite geometric continuation to the requested one-sided limit.
-            af=fl if anchor is anchor_left else fr;land=anchor;checks=[]
-            distance=abs(af-fc);target=abs(f-fc);side=-1 if af<fc else 1;fractions=[]
-            for j in range(23):
-                if distance<=2*target:break
-                distance/=2;fractions.append(fc+side*distance)
-            if distance>2*target:raise core.Unresolved('B2_LATERAL_24_STEP_CAP')
-            fractions.append(f)
-            for frac in fractions:
-                pm=self.pm(T0+frac*(T1-T0),B0+frac*(B1-B0));pts,ok=ls.continuous_points(pm,land['points'])
-                checks.append(dict(fraction=frac,valid=ok,counts=[sum(p['index']==k for p in pts) for k in range(3)] if ok else None,
-                    maximum_gradient_residual=max(p['gradient_residual'] for p in pts) if ok else None,minimum_absolute_curvature=min(abs(v) for p in pts for v in p['eig']) if ok else None,
-                    minimum_point_separation=min(np.linalg.norm(p['m']-q['m']) for j,p in enumerate(pts) for q in pts[:j]) if ok else None))
+            def keep_checks(checks):
                 record['lateral_continuation_in_progress']=checks;persist()
-                if not ok:raise core.Unresolved('LATERAL_ROOT_CONTINUATION_UNRESOLVED')
-                land=ls.from_points(pm,pts,land)
-            return land,checks
+            return lateral_root_continuation(
+                lambda frac:self.pm(T0+frac*(T1-T0),B0+frac*(B1-B0)),
+                anchor,fl if anchor is anchor_left else fr,f,fc,keep_checks)
         try:
             left,lchecks=continue_side(anchor_left,lo);right,rchecks=continue_side(anchor_right,hi)
         except core.Unresolved as exc:
