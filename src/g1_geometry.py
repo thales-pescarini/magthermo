@@ -121,9 +121,67 @@ def canonical_from_candidate(pm,u,maximum_move=1e-4):
     if move>maximum_move:raise core.Unresolved('G1_CANONICAL_CORRECTION_TOO_LARGE:'+str(move))
     return dict(p,m=np.array(p['m'],copy=True),canonical_correction_from_candidate=move)
 
+def diagonal_plane_candidate(pm, u, dps=85, maximum_move=1e-4):
+    """Exact stationary family x=y for a verified uncoupled zero-field plane.
+
+    On m=(sx*sqrt((1-q)/2),sx*sqrt((1-q)/2),sz*sqrt(q)),
+    dE/dq=A+B*q+C*q**2. Coefficients are promoted BEFORE subtraction.
+    Every returned root still passes the full three-dimensional MP KKT,
+    tangent-Hessian, correction and seed-movement guards. No state is added.
+    """
+    if dps not in [85,120]:raise ValueError('TWO_AUTHORIZED_PRECISION_LEVELS_ONLY')
+    u=np.asarray(u,float);D=pm.D;eps=8*np.finfo(float).eps
+    applicable=(precision_supported(pm) and np.array_equal(pm.B,np.zeros(3))
+        and np.array_equal(pm.h,np.zeros(3)) and np.array_equal(D,D.T)
+        and D[0,0]==D[1,1] and D[0,2]==D[1,2]==0.
+        and abs(u[0]-u[1])<=eps and abs(u[0])>eps)
+    if not applicable:return None
+    with mp.workdps(dps):
+        k1,k2,dm,h=coefficients(pm)
+        A=k1/2+k2/4+dm[2,2]-dm[0,0]-dm[0,1]
+        B=-3*k1/2-k2;C=3*k2/4
+        sx=mp.mpf(1 if u[0]>0 else -1);sz=mp.mpf(1 if u[2]>0 else -1)
+        directions=[]
+        if abs(u[2])<=eps:
+            directions.append(([sx/mp.sqrt(2),sx/mp.sqrt(2),mp.mpf(0)],'center'))
+        else:
+            if C==0:
+                roots=[] if B==0 else [-A/B]
+            else:
+                disc=B*B-4*C*A
+                if disc<0:return None
+                radical=mp.sqrt(disc)
+                # One cancellation-free root and its companion.
+                denominator=-B-mp.sign(B if B else 1)*radical
+                roots=[denominator/(2*C)] if denominator else [mp.mpf(0)]
+                if denominator:roots.append(2*A/denominator)
+            for i,q in enumerate(roots):
+                if 0<q<1:
+                    directions.append(([sx*mp.sqrt((1-q)/2),sx*mp.sqrt((1-q)/2),sz*mp.sqrt(q)],f'root_{i}'))
+        # The center is an exact stationary root on both sides. If the q>0
+        # family has disappeared, correct only a nearby seed to that parent;
+        # its full tangent Hessian still determines its current Morse index.
+        if not directions:
+            directions.append(([sx/mp.sqrt(2),sx/mp.sqrt(2),mp.mpf(0)],'parent_after_disappearance'))
+        matches=[]
+        for direction,branch in directions:
+            point=mp_point(pm,direction,dps,f'diagonal_plane_{branch}_x{int(sx):+d}_z{int(sz):+d}')
+            move=float(np.linalg.norm(point['m']-u))
+            if move<=maximum_move:matches.append((point,move))
+        if len(matches)!=1:raise core.Unresolved('E_DIAGONAL_PLANE_CORRECTION_NOT_UNIQUE_OR_OUTSIDE_BOUND')
+        point,move=matches[0]
+        point.update(geometry_source='E_diagonal_plane_polynomial_KKT',KKT_seed_direction_change=move,
+            reduced_stationary_polynomial=dict(A=mp.nstr(A,dps),B=mp.nstr(B,dps),C=mp.nstr(C,dps)),
+            full_three_dimensional_stationary_and_curvature_checks=True)
+        core.COUNTS['E_diagonal_plane_corrections']+=1
+        return point
+
+
 def refine_kkt(pm,u,dps=85,maximum_move=1e-4):
     if dps not in [85,120]:raise ValueError('TWO_AUTHORIZED_PRECISION_LEVELS_ONLY')
     core.COUNTS['bounded_KKT_MP_calls_'+str(dps)]+=1
+    diagonal=diagonal_plane_candidate(pm,u,dps,maximum_move)
+    if diagonal is not None:return diagonal
     with mp.workdps(dps):
         k1,k2,D,h=coefficients(pm);v=mp.matrix([mp.mpf(float(x)) for x in u]);v/=mp.sqrt((v.T*v)[0]);_,g,_=polynomial(k1,k2,D,h,v)
         sc=max(mp.mpf(1),abs(k1),abs(k2),max(abs(x) for x in D),max(abs(x) for x in h))
