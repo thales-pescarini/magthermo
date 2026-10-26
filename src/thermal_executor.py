@@ -238,6 +238,64 @@ class Executor:
         return new
 
     def event(self,T0,B0,T1,B1,old):
+        """Keep the reference path first; narrow failed reverse-event anchors.
+
+        A wide anchor can straddle a second, already encountered fold.  Root
+        continuation must then reject that anchor rather than associate roots
+        across the extra event.  Retry only the existing smaller temperature
+        anchors, before any map/cache commit, with the exact same known critical
+        point.  No occupation or transport rule is replaced.
+        """
+        hint=copy.deepcopy(self.pending_critical_hint)
+        start=len(self.events);attempts=[];family=[.1,.02,.004]
+        if getattr(self,'_retry_lateral_anchor_offsets',None) is not None:
+            raise core.Unresolved('LATERAL_ANCHOR_RETRY_CONTEXT_ALREADY_ACTIVE')
+        try:
+            for _ in family:
+                try:
+                    result=self._event_reference(T0,B0,T1,B1,old)
+                except core.Unresolved as exc:
+                    record=self.events[-1] if len(self.events)>start else {}
+                    if attempts:
+                        record['lateral_anchor_retry_history']=copy.deepcopy(attempts)
+                    eligible=(str(exc)=='LATERAL_ROOT_CONTINUATION_UNRESOLVED'
+                        and hint is not None and float(T0)!=float(T1)
+                        and np.array_equal(np.asarray(B0),np.zeros(3))
+                        and np.array_equal(np.asarray(B1),np.zeros(3))
+                        and record.get('critical_root',{}).get('reversed_known_critical_location') is True
+                        and record.get('status')=='NUMERICAL_UNRESOLVED'
+                        and 'pre_graph' not in record and 'post_graph' not in record
+                        and record.get('selected_anchor_offset') in family
+                        and record.get('lateral_continuation_in_progress',[])
+                        and record['lateral_continuation_in_progress'][-1]['valid'] is False)
+                    if not eligible:raise
+                    selected=record['selected_anchor_offset']
+                    remaining=family[family.index(selected)+1:]
+                    if not remaining:raise
+                    attempts.append(copy.deepcopy(record))
+                    del self.events[start:]
+                    self.pending_critical_hint=copy.deepcopy(hint)
+                    self._retry_lateral_anchor_offsets=remaining
+                    continue
+                if attempts:
+                    record=self.events[-1]
+                    record['lateral_anchor_retry_history']=copy.deepcopy(attempts)
+                    record['lateral_retry_scope']='same known reverse critical point; smaller declared anchors; unchanged transport'
+                    key=(float(T0),tuple(np.asarray(B0)),float(T1),tuple(np.asarray(B1)))
+                    if key in self.event_solutions:
+                        entry=self.event_solutions[key]
+                        self.event_solutions[key]=(*entry[:-1],copy.deepcopy(record))
+                return result
+            raise core.Unresolved('LATERAL_ANCHOR_RETRY_FAMILY_EXHAUSTED')
+        finally:
+            # Retain every rejected anchor even if a later, unrelated error
+            # occurs after the two verified sides and before transport commit.
+            if attempts and len(self.events)>start:
+                self.events[-1]['lateral_anchor_retry_history']=copy.deepcopy(attempts)
+            if hasattr(self,'_retry_lateral_anchor_offsets'):
+                del self._retry_lateral_anchor_offsets
+
+    def _event_reference(self,T0,B0,T1,B1,old):
         t=time.monotonic();T0=float(T0);T1=float(T1);B0=np.asarray(B0);B1=np.asarray(B1)
         temperature=abs(T1-T0)>0;tol=1e-6/abs(T1-T0) if temperature else 1e-8/max(float(np.linalg.norm((B1-B0)/5e-5)),1e-300)
         event_key=(float(T0),tuple(B0),float(T1),tuple(B1))
@@ -309,6 +367,8 @@ class Executor:
         fc=critical['fraction'];lo=max(0.,fc-tol*.49);hi=min(1.,fc+tol*.49)
         record.update(fraction_bracket=[lo,hi],temperature_bracket_C=[T0+lo*(T1-T0),T0+hi*(T1-T0)],field_fraction_width=hi-lo)
         offsets=[.1,.02,.004] if temperature else [.01,.002,.0004]
+        retry_offsets=getattr(self,'_retry_lateral_anchor_offsets',None)
+        if retry_offsets is not None:offsets=retry_offsets
         anchor_left=None;anchor_right=None
         for offset in offsets:
             delta=offset/abs(T1-T0) if temperature else offset/max(np.linalg.norm((B1-B0)/5e-5),1e-300)
