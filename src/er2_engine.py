@@ -20,7 +20,7 @@ import g1_geometry as geometry
 import thermal_executor as thermal
 
 ROOT=Path(__file__).resolve().parents[1]
-ALGORITHM_VERSION='ER2_EXACT_GEOMETRY_MEMO_V2'
+ALGORITHM_VERSION='ER2_EXACT_GEOMETRY_MEMO_V3'
 TRANSPORT_R1='E1-TQ01-2026-10-25-UNKNOWN'
 TRANSPORT_AMENDED='E1-TQ01-R1'
 
@@ -130,6 +130,14 @@ class SharedCaches(inherited.SharedCaches):
                     if okay and key is not None:self.unique_physical_landscapes.add(key)
                 elif name=='continuous_points':okay=bool(result[1])
                 elif name=='flow':okay=(result.get('destination') is not None and result.get('energy_monotone_decreasing') is True)
+                elif name=='refine_kkt':
+                    requested_dps=args[1] if len(args)>1 else kwargs.get('dps',85)
+                    okay=(result.get('morse') is True and result.get('geometry_precision',0)==requested_dps
+                          and result.get('gradient_residual',float('inf'))<1e-40
+                          and result.get('normal_residual',float('inf'))<1e-40
+                          and result.get('angular_correction_eta',float('inf'))<=1e-9
+                          and np.asarray(result.get('m',[])).shape==(3,)
+                          and np.isfinite(np.asarray(result.get('m',[]))).all())
                 if use_cache and okay:self.publish(name,key,result)
                 elif use_cache:
                     self.failures[counter+':incomplete_not_published']+=1
@@ -144,7 +152,7 @@ class SharedCaches(inherited.SharedCaches):
                 original=getattr(landscape,name);originals[(landscape,name)]=original
                 setattr(landscape,name,wrap(name,original,cacheable))
             original=geometry.refine_kkt;originals[(geometry,'refine_kkt')]=original
-            geometry.refine_kkt=wrap('refine_kkt',original,False)
+            geometry.refine_kkt=wrap('refine_kkt',original,True)
             yield
         finally:
             for (module,name),original in originals.items():setattr(module,name,original)
