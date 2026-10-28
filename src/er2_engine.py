@@ -20,7 +20,7 @@ import g1_geometry as geometry
 import thermal_executor as thermal
 
 ROOT=Path(__file__).resolve().parents[1]
-ALGORITHM_VERSION='ER2_EXACT_GEOMETRY_MEMO_V1'
+ALGORITHM_VERSION='ER2_EXACT_GEOMETRY_MEMO_V2'
 TRANSPORT_R1='E1-TQ01-2026-10-25-UNKNOWN'
 TRANSPORT_AMENDED='E1-TQ01-R1'
 
@@ -54,14 +54,17 @@ class SharedCaches(inherited.SharedCaches):
         self.er2_counts=collections.Counter();self.er2_cost=collections.Counter();self.current_phase='unspecified'
         self.unique_physical_landscapes=set();self.failures=collections.Counter();self._installed=False
         self.seen_keys=collections.defaultdict(set);self.seen_energies=collections.defaultdict(set)
+        self.evicted_keys=collections.defaultdict(set);self.unpublished_keys=collections.defaultdict(set)
         self.census_requests=[]
 
     def publish(self,bank,key,value):
         # Copy before publication, so an exception or caller mutation cannot expose a partial object.
         payload=copy.deepcopy(value);bucket=self.banks[bank]
         bucket[key]=payload;bucket.move_to_end(key)
+        self.unpublished_keys[bank].discard(key)
         while len(bucket)>self.capacity:
-            bucket.popitem(last=False);self.er2_counts[bank+':evictions']+=1
+            evicted,_=bucket.popitem(last=False);self.evicted_keys[bank].add(evicted)
+            self.er2_counts[bank+':evictions']+=1
 
     def lookup(self,bank,key):
         bucket=self.banks[bank]
@@ -99,7 +102,8 @@ class SharedCaches(inherited.SharedCaches):
                     self.er2_counts[counter+':misses']+=1
                     if use_cache:
                         energy=digest(pm.identity())
-                        reason=('previous_key_evicted' if key in self.seen_keys[name]
+                        reason=('prior_incomplete_or_exception_not_published' if key in self.unpublished_keys[name]
+                                else 'previous_key_actually_evicted' if key in self.evicted_keys[name]
                                 else 'new_exact_physical_landscape' if energy not in self.seen_energies[name]
                                 else 'same_energy_new_old_roots_or_verification_arguments')
                         self.er2_counts[name+':miss_reason:'+reason]+=1
@@ -110,6 +114,7 @@ class SharedCaches(inherited.SharedCaches):
                     result=original(pm,*args,**kwargs)
                 except Exception:
                     self.failures[counter+':producer_exception']+=1
+                    if use_cache:self.unpublished_keys[name].add(key)
                     self.er2_cost[counter+':query_inclusive_s']+=time.monotonic()-begin
                     raise
                 finally:
@@ -126,7 +131,9 @@ class SharedCaches(inherited.SharedCaches):
                 elif name=='continuous_points':okay=bool(result[1])
                 elif name=='flow':okay=(result.get('destination') is not None and result.get('energy_monotone_decreasing') is True)
                 if use_cache and okay:self.publish(name,key,result)
-                elif use_cache:self.failures[counter+':incomplete_not_published']+=1
+                elif use_cache:
+                    self.failures[counter+':incomplete_not_published']+=1
+                    self.unpublished_keys[name].add(key)
                 if name=='enumerate_land':self.census_requests.append(dict(T_C=pm.T,B_crystal_T=pm.B.tolist(),phase=self.current_phase,key=key,hit=False,seconds=time.monotonic()-begin,complete=okay))
                 self.er2_cost[counter+':query_inclusive_s']+=time.monotonic()-begin
                 return result
