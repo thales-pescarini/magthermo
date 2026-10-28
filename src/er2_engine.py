@@ -11,8 +11,11 @@ import functools
 import hashlib
 import json
 from pathlib import Path
+import sys
 import time
 import numpy as np
+import scipy
+import mpmath as mp
 import e1_core as core
 import general_engine as inherited
 import r1_landscape as landscape
@@ -20,7 +23,7 @@ import g1_geometry as geometry
 import thermal_executor as thermal
 
 ROOT=Path(__file__).resolve().parents[1]
-ALGORITHM_VERSION='ER2_EXACT_GEOMETRY_MEMO_V3'
+ALGORITHM_VERSION='ER2_EXACT_GEOMETRY_MEMO_V4'
 TRANSPORT_R1='E1-TQ01-2026-10-25-UNKNOWN'
 TRANSPORT_AMENDED='E1-TQ01-R1'
 
@@ -38,7 +41,9 @@ def source_signature():
     files=['src/er2_engine.py','src/r1_landscape.py','src/g1_geometry.py','src/e1_core.py','src/grain_api.py',
            'src/thermal_executor.py','src/general_engine.py','src/factorized_executor.py',
            'src/gate1_verified_methods.py','config/B2_CENSUS_POLICY.json','config/protocols.yaml']
-    return digest({p:hashlib.sha256((ROOT/p).read_bytes()).hexdigest() for p in files})
+    return digest(dict(files={p:hashlib.sha256((ROOT/p).read_bytes()).hexdigest() for p in files},
+                       runtime=dict(python=sys.version,platform=sys.platform,numpy=np.__version__,
+                                    scipy=scipy.__version__,mpmath=mp.__version__)))
 
 
 def geometry_fingerprint(graph):
@@ -55,6 +60,7 @@ class SharedCaches(inherited.SharedCaches):
         self.unique_physical_landscapes=set();self.failures=collections.Counter();self._installed=False
         self.seen_keys=collections.defaultdict(set);self.seen_energies=collections.defaultdict(set)
         self.evicted_keys=collections.defaultdict(set);self.unpublished_keys=collections.defaultdict(set)
+        self.failed_attempts=collections.defaultdict(collections.OrderedDict)
         self.census_requests=[]
 
     def publish(self,bank,key,value):
@@ -68,6 +74,24 @@ class SharedCaches(inherited.SharedCaches):
 
     def lookup(self,bank,key):
         bucket=self.banks[bank]
+        if key not in bucket:return None
+        bucket.move_to_end(key);return copy.deepcopy(bucket[key])
+
+    def publish_failed_attempt(self,kind,key,exc):
+        # A finite solver failure is not a landscape, nor proof that no root exists.
+        # Resource limits, cancellation, timeouts and unexpected exceptions are never reused.
+        kinds={core.Unresolved:'core.Unresolved',ValueError:'ValueError',ZeroDivisionError:'ZeroDivisionError'}
+        if type(exc) not in kinds or str(exc).startswith('ER2_'):return
+        bucket=self.failed_attempts[kind]
+        payload=dict(exception_kind=kinds[type(exc)],args=copy.deepcopy(exc.args),
+                     attributes=copy.deepcopy(exc.__dict__),input_key=key,source_signature=source_signature(),
+                     finite_attempt_only=True,complete_geometry=False,proof_of_nonexistence=False)
+        bucket[key]=payload;bucket.move_to_end(key)
+        while len(bucket)>self.capacity:
+            bucket.popitem(last=False);self.er2_counts[kind+':negative_attempt_evictions']+=1
+
+    def failed_attempt(self,kind,key):
+        bucket=self.failed_attempts[kind]
         if key not in bucket:return None
         bucket.move_to_end(key);return copy.deepcopy(bucket[key])
 
@@ -99,6 +123,16 @@ class SharedCaches(inherited.SharedCaches):
                         self.er2_cost[counter+':query_inclusive_s']+=time.monotonic()-begin
                         if name=='enumerate_land':self.census_requests.append(dict(T_C=pm.T,B_crystal_T=pm.B.tolist(),phase=self.current_phase,key=key,hit=True,seconds=time.monotonic()-begin))
                         return cached
+                    failed=self.failed_attempt(name,key) if use_cache and name=='refine_kkt' else None
+                    if failed is not None:
+                        self.er2_counts[counter+':negative_attempt_replays']+=1
+                        self.er2_counts['phase:'+str(self.current_phase)+':'+counter+':negative_attempt_replays']+=1
+                        elapsed=time.monotonic()-begin
+                        self.er2_cost[counter+':failed_attempt_replay_inclusive_s']+=elapsed
+                        self.er2_cost[counter+':query_inclusive_s']+=elapsed
+                        cls={'core.Unresolved':core.Unresolved,'ValueError':ValueError,'ZeroDivisionError':ZeroDivisionError}[failed['exception_kind']]
+                        error=cls(*failed['args']);error.__dict__.update(failed['attributes'])
+                        raise error
                     self.er2_counts[counter+':misses']+=1
                     if use_cache:
                         energy=digest(pm.identity())
@@ -112,9 +146,10 @@ class SharedCaches(inherited.SharedCaches):
                 self.er2_counts['phase:'+str(self.current_phase)+':'+counter+':producer_calls']+=1
                 try:
                     result=original(pm,*args,**kwargs)
-                except Exception:
+                except Exception as exc:
                     self.failures[counter+':producer_exception']+=1
                     if use_cache:self.unpublished_keys[name].add(key)
+                    if use_cache and name=='refine_kkt':self.publish_failed_attempt(name,key,exc)
                     self.er2_cost[counter+':query_inclusive_s']+=time.monotonic()-begin
                     raise
                 finally:
@@ -163,6 +198,12 @@ class SharedCaches(inherited.SharedCaches):
                     inclusive_profile_seconds=dict(self.er2_cost),profile_parents_and_children_not_additive=True,
                     objects={k:len(v) for k,v in self.banks.items()},unique_complete_landscapes=len(self.unique_physical_landscapes),
                     failures_not_reused_as_complete=dict(self.failures),capacity_per_kind=self.capacity,
+                    failed_attempt_namespace={k:len(v) for k,v in self.failed_attempts.items()},
+                    failed_attempt_sample={kind:[dict(input_key=p['input_key'],exception_kind=p['exception_kind'],
+                         arguments_repr=repr(p['args']),finite_attempt_only=True,complete_geometry=False,
+                         proof_of_nonexistence=False) for p in list(bank.values())[:3]]
+                         for kind,bank in self.failed_attempts.items() if bank},
+                    failed_attempt_reuse_scope='Same bounded numerical attempt only; same failure type/arguments/evidence, never a complete root or proof of physical nonexistence; original fallback remains mandatory.',
                     rounded_physical_keys=False,propagated_magnetic_states_or_responses_cached=False)
 
 
