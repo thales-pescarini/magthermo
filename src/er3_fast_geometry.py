@@ -4,8 +4,10 @@ import functools
 import hashlib
 from pathlib import Path
 import mpmath as mp
+import numpy as np
 import er2_engine as base
 import g1_geometry as geometry
+from er3_rfree_timing import RfreeTiming
 
 VERSION='ER3_EXACT_MP_SCALAR_V1'
 ORIGINAL_POLYNOMIAL=geometry.polynomial
@@ -15,7 +17,8 @@ ORIGINAL_SOURCE_SHA=geometry.SOURCE_SHA
 @functools.lru_cache(maxsize=1)
 def signature():
     return base.digest(dict(version=VERSION,original_geometry_sha256=ORIGINAL_SOURCE_SHA,
-                            scalar_source_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest()))
+                            scalar_source_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+                            timing_source_sha256=hashlib.sha256(Path(__file__).with_name('er3_rfree_timing.py').read_bytes()).hexdigest()))
 
 
 def polynomial(k1,k2,D,h,u):
@@ -34,7 +37,7 @@ def polynomial(k1,k2,D,h,u):
     return E,g,H
 
 
-class SharedCaches(base.SharedCaches):
+class SharedCaches(RfreeTiming,base.SharedCaches):
     def physical_key(self,pm,kind,args,kwargs):
         return base.digest(dict(base=super().physical_key(pm,kind,args,kwargs),scalar_signature=signature()))
 
@@ -45,7 +48,8 @@ class SharedCaches(base.SharedCaches):
         try:
             geometry.polynomial=polynomial
             geometry.SOURCE_SHA=signature()
-            with super().pure_geometry_context():yield
+            with self.instrument_producers():
+                with super().pure_geometry_context():yield
         finally:
             geometry.polynomial=ORIGINAL_POLYNOMIAL
             geometry.SOURCE_SHA=ORIGINAL_SOURCE_SHA
@@ -59,6 +63,21 @@ class GeneralTape(base.GeneralTape):
     def prefix_geometry_key(self,graph):
         return base.digest(dict(base=super().prefix_geometry_key(graph),scalar_signature=signature()))
     def laboratory_geometry_key(self,land,p,protocol):
+        zero=bool(np.array_equal(np.asarray(land['identity']['B_crystal_T']),np.zeros(3)))
+        canonical=self.shared.zero_graphs.get(self.shared.zero_key(self,land['identity']['T_C']))
+        same=canonical is not None and base.geometry_fingerprint(canonical)==base.geometry_fingerprint(land)
+        prior_zero_events=[x for x in self.critical_catalog if np.array_equal(np.asarray(x['B_sample_T']),np.zeros(3))]
+        prior_zero_solutions=[k for k in self.event_solutions if self.zero_field_segment(k)]
+        verified=zero and land['identity']['T_C']==20. and same and not prior_zero_events and not prior_zero_solutions
+        previous=self.shared.rfree_lab_verified_this_case
+        self.shared.rfree_lab_verified_this_case=bool(verified and previous is not False)
+        self.er3_Rfree_lab_certificate=dict(entry_field_exactly_zero=zero,entry_T_C=land['identity']['T_C'],
+            entry_is_received_R_independent_zero_bank_geometry=same,
+            prior_zero_critical_count=len(prior_zero_events),prior_zero_solution_count=len(prior_zero_solutions),
+            laboratory_fields='exactly zero by unchanged inherited P12 chronology',
+            placeholder='all map columns independent; only dimensions/mass checked; no magnetic states reused',
+            source_scope='unchanged general_engine, factorized_executor and er2_engine; finite software dependency proof',
+            verified=bool(verified))
         return base.digest(dict(base=super().laboratory_geometry_key(land,p,protocol),scalar_signature=signature()))
 
 
