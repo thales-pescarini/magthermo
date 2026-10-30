@@ -94,7 +94,12 @@ def event_reference_er2(self,T0,B0,T1,B1,old):
             al['status']='COMPUTED_VALID';break
         al.update(status='NUMERICAL_UNRESOLVED',reason='LATERAL_CENSUS_CONNECTION_OR_TOPOLOGY_NOT_RESOLVED');persist()
     else:
-        record['reason']='FINITE_LATERAL_ANCHORS_EXHAUSTED';persist();raise core.Unresolved(record['reason'])
+        record['reason']='FINITE_LATERAL_ANCHORS_EXHAUSTED';persist()
+        from a2_census_repair import recover_anchor_censuses
+        repaired=recover_anchor_censuses(self,T0,B0,T1,B1,old,offsets,record,persist)
+        if repaired is None:raise core.Unresolved(record['reason'])
+        anchor_left,anchor_right,fl,fr,offset=repaired
+        record.pop('reason',None)
     record['selected_anchor_offset']=offset
     def continue_side(anchor,f):
         # A finite geometric continuation to the requested one-sided limit.
