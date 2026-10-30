@@ -47,8 +47,15 @@ def recover_anchor_censuses(executor,T0,B0,T1,B1,old,offsets,record,persist):
     if role=='candidate':pairs=p['candidate_pairs']
     else:
         mapping=getattr(executor,'a2_reference_resolution_targets',{})
-        if key not in mapping:raise core.Unresolved('A2_REFERENCE_RESOLUTION_TARGET_NOT_BOUND')
-        chosen=list(mapping[key])
+        uniform=getattr(executor,'a2_reference_uniform_candidate_pair',None)
+        if key in mapping:
+            chosen=list(mapping[key]);binding_scope='Exact event-key resolution metadata'
+        elif uniform is not None:
+            # The independent locator must not inherit candidate critical
+            # fractions. When every candidate repair in this exact case used
+            # the same pair, that pair defines its uniform finer control.
+            chosen=list(uniform);binding_scope='Uniform resolution choice in the exact bound physical case; independently located event'
+        else:raise core.Unresolved('A2_REFERENCE_RESOLUTION_TARGET_NOT_BOUND')
         if chosen not in p['candidate_pairs']:raise core.Unresolved('A2_REFERENCE_INVALID_CANDIDATE_LEVEL_METADATA')
         pairs=[p['control_pairs'][p['candidate_pairs'].index(chosen)]]
     temperature=abs(T1-T0)>0
@@ -60,7 +67,8 @@ def recover_anchor_censuses(executor,T0,B0,T1,B1,old,offsets,record,persist):
         candidate_sequence=p['candidate_pairs'],executed_role_pairs=pairs,
         offsets=list(offsets),attempts=[],status='RUNNING',
         root_lists_or_caches_shared_between_routes=False,
-        reference_cross_route_information='Only candidate resolution choice by exact event-key; no roots, critical fraction, Y, tapes or caches.' if role=='reference' else None)
+        reference_cross_route_information='Only resolution choices in the exact physical case, by exact event-key or its uniform pair; no roots, critical fraction, Y, tapes or caches.' if role=='reference' else None)
+    if role=='reference':activation['resolution_metadata_binding_scope']=binding_scope
     if not hasattr(executor,'a2_fallback_activations'):executor.a2_fallback_activations=[]
     executor.a2_fallback_activations.append(activation)
     record['A2_census_repair']=activation;persist()
@@ -94,7 +102,9 @@ def recover_anchor_censuses(executor,T0,B0,T1,B1,old,offsets,record,persist):
             if left['status']=='COMPUTED_VALID' and right['status']=='COMPUTED_VALID' and same and left['counts']!=right['counts']:
                 al['status']='COMPUTED_VALID'
                 activation.update(status='COMPUTED_VALID_LATERAL_CENSUS_REPAIR',selected_pair=pair,selected_offset=offset,wall_s=time.monotonic()-started)
-                persist();return left,right,fl,fr,offset
+                # All original selector locals must travel with the selected
+                # graphs; the caller's last exhausted offset is a different PM.
+                persist();return left,right,fl,fr,offset,Tl,Tr,Bl,Br
             al.update(status='NUMERICAL_UNRESOLVED',reason='LATERAL_CENSUS_CONNECTION_OR_TOPOLOGY_NOT_RESOLVED');persist()
     activation.update(status='FIXED_SEQUENCE_EXHAUSTED',wall_s=time.monotonic()-started)
     record['reason']='FINITE_LATERAL_ANCHORS_EXHAUSTED';persist()

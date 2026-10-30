@@ -98,7 +98,10 @@ def event_reference_er2(self,T0,B0,T1,B1,old):
         from a2_census_repair import recover_anchor_censuses
         repaired=recover_anchor_censuses(self,T0,B0,T1,B1,old,offsets,record,persist)
         if repaired is None:raise core.Unresolved(record['reason'])
-        anchor_left,anchor_right,fl,fr,offset=repaired
+        anchor_left,anchor_right,fl,fr,offset,Tl0,Tr0,Bl0,Br0=repaired
+        if self.pm(Tl0,Bl0).identity()!=anchor_left['identity'] or self.pm(Tr0,Br0).identity()!=anchor_right['identity']:
+            raise core.Unresolved('A2_SELECTED_ANCHOR_MODEL_IDENTITY_MISMATCH')
+        record['A2_selected_anchor_model_identity_verified']=True
         record.pop('reason',None)
     record['selected_anchor_offset']=offset
     def continue_side(anchor,f):
