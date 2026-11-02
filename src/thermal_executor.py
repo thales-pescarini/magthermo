@@ -492,37 +492,8 @@ class Executor:
         return lo,hi,left,right,P
 
     def advance(self,p,old,T0,B0,T1,B1,seconds,label,depth=0):
-        if depth>4:raise core.Unresolved('TOO_MANY_EVENTS_IN_ONE_PRESCRIBED_STEP')
-        B0=np.asarray(B0);B1=np.asarray(B1);Tm=(T0+T1)/2;Bm=(B0+B1)/2
-        input_p=np.array(p,copy=True)
-        transaction=self.transaction_token()
-        hint=None
-        if T0!=T1 and np.linalg.norm(B1-B0)==0:
-            candidates=[x for x in self.critical_catalog if min(T0,T1)<x['T_C']<max(T0,T1) and np.linalg.norm(np.array(x['B_sample_T'])-B0)<1e-15]
-            if candidates:hint=min(candidates,key=lambda x:abs(x['T_C']-T0))
-        self.pending_critical_hint=hint
-        try:
-            if hint is not None:raise core.Unresolved('STATIONARY_EVENT_CANDIDATE')
-            mid=self.landscape(Tm,Bm,old);end=self.landscape(T1,B1,mid)
-            p=self.transport(self.align(old,mid,p),p,label+':align_mid');p=self.apply(p,mid,Tm,seconds,label);p=self.transport(self.align(mid,end,p),p,label+':align_end');checked(p,label+':identity')
-            return p,end
-        except core.Unresolved as e:
-            if str(e) not in ['STATIONARY_EVENT_CANDIDATE','IDENTITY_CONTINUATION_REQUIRES_EVENT','CHANNEL_TOPOLOGY_CHANGE','NONPOSITIVE_BARRIER_NO_CLIPPING']:raise
-        self.rollback_transaction(transaction)
-        p=input_p.copy()
-        lo,hi,left,right,P=self.event(T0,B0,T1,B1,old)
-        Tl=T0+lo*(T1-T0);Bl=B0+lo*(B1-B0);Tr=T0+hi*(T1-T0);Br=B0+hi*(B1-B0)
-        event_left=left
-        if lo>0:
-            p,left=self.advance(p,old,T0,B0,Tl,Bl,seconds*lo,label+':pre',depth+1)
-            p=self.transport(self.align(left,event_left,p),p,label+':align_event_left');left=event_left
-        p=self.apply(p,left,Tl,seconds*(hi-lo)/2,label+':event_left')
-        before_map=p.copy();p=self.transport(P,p,label+':event_map',self.events[-1]);map_check=checked(p,label+':event_map')
-        self.events[-1].update(occupation_before_map=before_map,occupation_after_map=p.copy(),probability_check=map_check,physical_step_seconds=seconds,time_partition_seconds=[seconds*lo,seconds*(hi-lo)/2,seconds*(hi-lo)/2,seconds*(1-hi)],event_segment_label=label)
-        p=self.apply(p,right,Tr,seconds*(hi-lo)/2,label+':event_right')
-        if hi<1:p,end=self.advance(p,right,Tr,Br,T1,B1,seconds*(1-hi),label+':post',depth+1)
-        else:end=right
-        return p,end
+        from a3_event_sequence import advance
+        return advance(self,p,old,T0,B0,T1,B1,seconds,label,depth)
 
     def ramp(self,p,land,T0,B0,T1,B1,seconds,label):
         t=time.monotonic()
@@ -530,7 +501,8 @@ class Executor:
         else:n=self.level['field_ramp_substeps']
         for k in range(n):
             a=k/n;b=(k+1)/n
-            p,land=self.advance(p,land,T0+a*(T1-T0),np.array(B0)+a*(np.array(B1)-B0),T0+b*(T1-T0),np.array(B0)+b*(np.array(B1)-B0),seconds/n,label)
+            from a3_event_sequence import prescribed
+            p,land=prescribed(self,self.advance,p,land,T0+a*(T1-T0),np.array(B0)+a*(np.array(B1)-B0),T0+b*(T1-T0),np.array(B0)+b*(np.array(B1)-B0),seconds/n,label)
             if k%16==0:self.snapshot(p,land,label,k,n)
         self.cost['ramps']+=time.monotonic()-t
         self.trace.append(dict(segment=label,T_start=T0,T_end=T1,seconds=seconds,substeps=n,state=p,states=len(p)))

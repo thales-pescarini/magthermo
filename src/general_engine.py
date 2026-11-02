@@ -325,6 +325,8 @@ class GeneralTape(GeometryTape):
             raise original_error
         self.rollback_transaction(token)
         del self.events[events_at:];del self.trace[trace_at:];self.steps=steps_at
+        from a3_event_sequence import rollback_original_trial
+        rollback_original_trial(self)
         # Only an already identified maximum/saddle fold may be bypassed in
         # this bounded retry. A minimum/saddle hint remains compulsory.
         B0=np.asarray(B0);B1=np.asarray(B1)
@@ -352,7 +354,7 @@ class GeneralTape(GeometryTape):
                 if not any(hint is present for present in self.critical_catalog):self.critical_catalog.append(hint)
 
     def failure_evidence(self):
-        return dict(actions=self.actions,events=self.events,initial_p=self.initial_p,
+        return dict(actions=self.actions,events=self.events,initial_p=self.initial_p,a3_sequence_audit=getattr(self,'a3_sequence_audit',[]),
                     geometry_cost_s=self.cost,diagnostic=getattr(self,'diagnostic',None),
                     minimum_branch_proofs=self.minimum_branch_proofs,
                     reference_partition_failures=self.reference_partition_failures,
@@ -362,6 +364,7 @@ class GeneralTape(GeometryTape):
 
     def compile(self,protocol='P12'):
         result=super().compile(protocol)
+        result['a3_sequence_audit']=getattr(self,'a3_sequence_audit',[])
         result['minimum_branch_proofs']=self.minimum_branch_proofs
         result['reference_partition_failures']=self.reference_partition_failures
         result['partition_policy']='reference_first_minimum_recovery_after_failure'

@@ -41,7 +41,7 @@ def source_signature():
     files=['src/er2_engine.py','src/r1_landscape.py','src/g1_geometry.py','src/e1_core.py','src/grain_api.py',
            'src/thermal_executor.py','src/general_engine.py','src/factorized_executor.py',
            'src/gate1_verified_methods.py','config/B2_CENSUS_POLICY.json','config/protocols.yaml',
-           'src/a2_census_repair.py','config/CENSUS_REPAIR_A2.json']
+           'src/a2_census_repair.py','config/CENSUS_REPAIR_A2.json','src/a3_event_sequence.py']
     return digest(dict(files={p:hashlib.sha256((ROOT/p).read_bytes()).hexdigest() for p in files},
                        runtime=dict(python=sys.version,platform=sys.platform,numpy=np.__version__,
                                     scipy=scipy.__version__,mpmath=mp.__version__)))
