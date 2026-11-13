@@ -77,7 +77,7 @@ def register_field_critical(executor,T0,B0,T1,B1,record):
         verification='existing full left/right censuses, critical KKT and signed curvature tests passed; no magnetic state cached'))
 
 
-def build():
+def build(anchor_policy=None):
     SOURCE_MAP.clear()
     old_hint="""    hint=None
     if T0!=T1 and np.linalg.norm(B1-B0)==0:
@@ -88,9 +88,14 @@ def build():
         ("'CHANNEL_TOPOLOGY_CHANGE','NONPOSITIVE_BARRIER_NO_CLIPPING'",
          "'CHANNEL_TOPOLOGY_CHANGE','NONPOSITIVE_BARRIER_NO_CLIPPING','STATE_COUNT_CHANGED_WITHOUT_EVENT','CONTINUED_STATE_NOT_IN_TARGET_CENSUS'")],
         dict(pa_select_hint=select_hint))
-    producer=clone(ORIGINAL_EVENT,[
+    replacements=[
         ("fc=(hint['T_C']-T0)/(T1-T0);lo=", 
-         "fc=(hint['_field_segment_fraction'] if '_field_segment_fraction' in hint else (hint['T_C']-T0)/(T1-T0));lo=")],{})
+         "fc=(hint['_field_segment_fraction'] if '_field_segment_fraction' in hint else (hint['T_C']-T0)/(T1-T0));lo=")]
+    extra={}
+    if anchor_policy is not None:
+        added,extra=anchor_policy.transforms()
+        replacements.extend(added)
+    producer=clone(ORIGINAL_EVENT,replacements,extra)
     def event(executor,T0,B0,T1,B1,old):
         result=producer(executor,T0,B0,T1,B1,old)
         register_field_critical(executor,T0,B0,T1,B1,executor.events[-1])
@@ -99,10 +104,10 @@ def build():
 
 
 @contextlib.contextmanager
-def installed():
+def installed(anchor_policy=None):
     assert sequence._frame is ORIGINAL_FRAME,'EVENT_SEQUENCE_PATCH_CONTEXT_CONFLICT'
     assert event_module.event_reference_er2 is ORIGINAL_EVENT,'EVENT_PRODUCER_PATCH_CONTEXT_CONFLICT'
-    frame,event=build()
+    frame,event=build(anchor_policy)
     try:
         sequence._frame=frame
         event_module.event_reference_er2=event
