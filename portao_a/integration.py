@@ -4,12 +4,12 @@ import math
 import numpy as np
 
 
-def atomic_npz(path,**arrays):
+def atomic_npz(path,*,compressed=False,**arrays):
     path=Path(path)
     path.parent.mkdir(parents=True,exist_ok=True)
     temp=path.with_name(path.name+'.pending.'+str(os.getpid()))
     with temp.open('wb') as f:
-        np.savez(f,**arrays)
+        (np.savez_compressed if compressed else np.savez)(f,**arrays)
         f.flush();os.fsync(f.fileno())
     temp.replace(path)
     fsync_directory(path.parent)
@@ -95,44 +95,127 @@ def verify_raw(path,expected_shape=None):
     return record,array
 
 
+def numerical_contract(record):
+    required=('F2_signature','base_version','transport','protocol_sha256','resolution','dtype',
+              'environment_sha256')
+    if any(key not in record for key in required) or 'numeric_extensions' not in record['spec']:
+        raise ValueError('RAW_NUMERICAL_IDENTITY_REQUIRED')
+    return {**{key:record[key] for key in required},
+            'numeric_extensions':record['spec']['numeric_extensions']}
+
+
+def kernel_file(directory,metadata):
+    name=metadata.get('data_file','KERNEL.npz')
+    if Path(name).name!=name or not name.endswith('.npz'):
+        raise ValueError('UNSAFE_KERNEL_DATA_PATH')
+    return Path(directory)/name
+
+
+def read_kernel(directory):
+    directory=Path(directory)
+    metadata=read(directory/'KERNEL.json')
+    path=kernel_file(directory,metadata)
+    if sha(path)!=metadata['data_sha256']:
+        raise ValueError('KERNEL_HASH_MISMATCH')
+    with np.load(path,allow_pickle=False) as data:
+        arrays={key:np.array(data[key],copy=True) for key in data.files}
+    return metadata,arrays
+
+
 def reduce_rotations(rotation_paths,rotation_weights,output,identity):
-    """Persist a kernel integrated in R and exact accounting of missing rotations."""
-    if len(rotation_paths)!=len(rotation_weights) or abs(float(np.sum(rotation_weights))-1.)>1e-12:
-        raise ValueError('COMPLETE_R_RULE_REQUIRED')
+    """Commit a canonical R prefix atomically; resume never adds an R twice.
+
+    A missing R stops the prefix, so the final compensated sum has the same
+    order after any crash. Later available rotations remain explicitly pending.
+    New data generations precede the atomic metadata commit. Existing generations
+    are removed only after the new committed pair has been read and verified.
+    """
+    weights=[float(w) for w in rotation_weights]
+    if (len(rotation_paths)!=len(weights) or not weights or
+        any(not math.isfinite(w) or w<=0 for w in weights) or abs(math.fsum(weights)-1.)>1e-12):
+        raise ValueError('COMPLETE_POSITIVE_R_RULE_REQUIRED')
+    if 'numerical_contract' not in identity:
+        raise ValueError('EXPECTED_NUMERICAL_IDENTITY_REQUIRED')
+    output=Path(output)
     shape=tuple(identity['shape'])
+    identity_hash=digest(dict(identity=identity,R_weights=weights))
     accumulator=PositiveAccumulator(shape)
     incorporated=[]
-    for index,(path,weight) in enumerate(zip(rotation_paths,rotation_weights)):
-        record,array=(None,None) if path is None else verify_raw(path,shape)
-        if record is not None:
-            for name,expected in [('d_nm',identity['d_nm']),('ells',identity['ells'])]:
-                if record[name]!=expected:
-                    raise ValueError('RAW_PHYSICAL_GRID_MISMATCH:'+name)
-            spec=record['spec']
-            if (float(spec['node']['s'])!=float(identity['s']) or
-                [float(spec['node'][k]) for k in ('c_x','c_y','c_z')]!=identity['c'] or
-                float(spec['T_C'])!=float(identity['T_event_C']) or spec['protocol']!='PX12' or
-                spec['rotation_index']!=index or spec.get('R_count',12)!=len(rotation_paths)):
-                raise ValueError('RAW_PHYSICAL_IDENTITY_MISMATCH')
-        accumulator.add(str(index),float(weight),array)
-        incorporated.append(dict(R_index=index,weight=float(weight),complete=array is not None,
-             result_path=str(Path(path)/'RESULT.json') if path else None,
-             result_sha256=sha(Path(path)/'RESULT.json') if path else None,
-             Y_sha256=record.get('Y_sha256') if record else None,
-             numerical_signature=record.get('F2_signature') if record else None,
-             numeric_extension=record.get('numeric_extension') if record else None))
-    output=Path(output)
-    atomic_npz(output/'KERNEL.npz',known=accumulator.known,complete_value=accumulator.total(),
-               compensation=accumulator.compensation,d_nm=np.asarray(identity['d_nm']),
-               ell=np.asarray(identity['ells']))
-    metadata=dict(schema='PORTAO_A_R_INTEGRATED_KERNEL_V1',**identity,
-        complete_R=accumulator.complete,represented_R_weight=accumulator.represented_capacity,
-        missing_R_weight=accumulator.missing_capacity,incorporated_R=incorporated,
-        dtype_calculated='float64',dtype_stored='float64',parental_population_weights_applied=False,
-        model_order=['F','N1'],axis_order=['diameter','ell','model','readout','vector_component'],
-        data_sha256=sha(output/'KERNEL.npz'),reduction_code_sha256=sha(__file__),
-        missing_contribution_replaced_with_zero=False)
+    old_path=None
+    prior=None
+    if (output/'KERNEL.json').exists():
+        prior,arrays=read_kernel(output)
+        if prior.get('identity_sha256')!=identity_hash:
+            raise ValueError('KERNEL_RESUME_IDENTITY_MISMATCH')
+        incorporated=prior['incorporated_R']
+        if [r['R_index'] for r in incorporated]!=list(range(len(incorporated))):
+            raise ValueError('KERNEL_NONCANONICAL_R_PREFIX')
+        accumulator.known=arrays['known']
+        if (accumulator.known.shape!=shape or accumulator.known.dtype!=np.float64 or
+            not np.isfinite(accumulator.known).all()):
+            raise ValueError('KERNEL_KNOWN_SHAPE_OR_VALUES_INVALID')
+        if prior['complete_R']:
+            return prior
+        accumulator.compensation=arrays['compensation']
+        if (accumulator.compensation.shape!=shape or accumulator.compensation.dtype!=np.float64 or
+            not np.isfinite(accumulator.compensation).all()):
+            raise ValueError('KERNEL_COMPENSATION_INVALID')
+        old_path=kernel_file(output,prior)
+    previous_count=len(incorporated)
+    pending_cause='NOT_YET_AVAILABLE'
+    for index in range(previous_count,len(weights)):
+        path=rotation_paths[index]
+        if path is None:
+            break
+        directory=Path(path)
+        if not (directory/'RESULT.json').exists():
+            break
+        if not (directory/'UNIT_RECEIPT.json').exists():
+            pending_cause='ATOMIC_UNIT_RECEIPT_NOT_YET_AVAILABLE'
+            break
+        if read(directory/'UNIT_RECEIPT.json')['result_sha256']!=sha(directory/'RESULT.json'):
+            raise ValueError('RAW_ATOMIC_RECEIPT_HASH_MISMATCH')
+        record,array=verify_raw(directory,shape)
+        if array is None:
+            pending_cause=record.get('failure_kind','NUMERICAL_UNRESOLVED')+':'+record.get('reason','')
+            break
+        if any(record[name]!=identity[name] for name in ('d_nm','ells')):
+            raise ValueError('RAW_PHYSICAL_GRID_MISMATCH')
+        spec=record['spec']
+        if (float(spec['node']['s'])!=float(identity['s']) or
+            [float(spec['node'][k]) for k in ('c_x','c_y','c_z')]!=identity['c'] or
+            float(spec['T_C'])!=float(identity['T_event_C']) or spec['protocol']!='PX12' or
+            spec['rotation_index']!=index or spec.get('R_count',12)!=len(weights)):
+            raise ValueError('RAW_PHYSICAL_IDENTITY_MISMATCH')
+        if digest(numerical_contract(record))!=digest(identity['numerical_contract']):
+            raise ValueError('RAW_NUMERICAL_IDENTITY_MISMATCH')
+        accumulator._add_vector(weights[index]*array)
+        incorporated.append(dict(R_index=index,weight=weights[index],complete=True,
+            result_path=str(directory/'RESULT.json'),result_sha256=sha(directory/'RESULT.json'),
+            Y_sha256=record['Y_sha256']))
+    if prior is not None and len(incorporated)==previous_count:
+        return prior
+    complete=len(incorporated)==len(weights)
+    generation=digest(dict(identity=identity_hash,incorporated=incorporated))[:24]
+    path=output/f'KERNEL.{generation}.npz'
+    arrays=dict(known=accumulator.known,d_nm=np.asarray(identity['d_nm']),ell=np.asarray(identity['ells']))
+    if not complete:
+        arrays['compensation']=accumulator.compensation
+    atomic_npz(path,compressed=True,**arrays)
+    metadata=dict(schema='PORTAO_A_R_INTEGRATED_KERNEL_V2',**identity,identity_sha256=identity_hash,
+        complete_R=complete,represented_R_weight=math.fsum(weights[:len(incorporated)]),
+        missing_R_weight=math.fsum(weights[len(incorporated):]),incorporated_R=incorporated,
+        pending_R=list(range(len(incorporated),len(weights))),first_pending_cause=None if complete else pending_cause,
+        R_weights=weights,dtype_calculated='float64',dtype_stored='float64',
+        parental_population_weights_applied=False,model_order=['F','N1'],
+        axis_order=['diameter','ell','model','readout','vector_component'],
+        data_file=path.name,data_sha256=sha(path),reduction_code_sha256=sha(__file__),
+        missing_contribution_replaced_with_zero=False,canonical_summation_order='R_index increasing')
     save(output/'KERNEL.json',metadata)
+    committed,_=read_kernel(output)
+    assert committed['data_sha256']==metadata['data_sha256']
+    if old_path is not None and old_path!=path:
+        old_path.unlink();fsync_directory(output)
     return metadata
 
 
@@ -152,14 +235,11 @@ def reduce_population(kernel_paths,shape,*,expected_SD_capacity):
             sources.append(dict(key=key,kernel=None,missing_capacity=capacity))
             continue
         directory=Path(path)
-        meta=read(directory/'KERNEL.json')
-        if sha(directory/'KERNEL.npz')!=meta['data_sha256']:
-            raise ValueError('KERNEL_HASH_MISMATCH')
-        with np.load(directory/'KERNEL.npz',allow_pickle=False) as data:
-            known=data['known']
-            if known.shape!=(len(w),*shape):
-                raise ValueError('KERNEL_SHAPE_MISMATCH')
-            value=np.tensordot(w,known,axes=(0,0))
+        meta,data=read_kernel(directory)
+        known=data['known']
+        if known.shape!=(len(w),*shape):
+            raise ValueError('KERNEL_SHAPE_MISMATCH')
+        value=np.tensordot(w,known,axes=(0,0))
         # known already contains R weights. Do not multiply those weights again.
         accumulator.add_known(key,value,capacity*meta['represented_R_weight'],
                               capacity*meta['missing_R_weight'])
