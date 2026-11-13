@@ -189,6 +189,8 @@ def reduce_rotations(rotation_paths,rotation_weights,output,identity):
             raise ValueError('RAW_PHYSICAL_IDENTITY_MISMATCH')
         if digest(numerical_contract(record))!=digest(identity['numerical_contract']):
             raise ValueError('RAW_NUMERICAL_IDENTITY_MISMATCH')
+        if 'R_matrices' in identity and record.get('rotation_matrix')!=identity['R_matrices'][index]:
+            raise ValueError('RAW_HAAR_ROTATION_MATRIX_MISMATCH')
         accumulator._add_vector(weights[index]*array)
         incorporated.append(dict(R_index=index,weight=weights[index],complete=True,
             result_path=str(directory/'RESULT.json'),result_sha256=sha(directory/'RESULT.json'),
