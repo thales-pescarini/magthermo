@@ -1,0 +1,31 @@
+TMx_percent: 0.0
+total_magnetic_volume_m3: 1.0e-18
+geometries:
+  B6:
+    PRO: 1.0
+    OBL: 2.080083823051904
+    id: B6
+    label: B6
+    rotation: identity
+    alignment: hard
+  P110:
+    PRO: 1.1
+    OBL: 1.0
+    id: P110
+    label: P110
+    rotation: identity
+    alignment: hard
+  P150:
+    PRO: 1.5
+    OBL: 1.0
+    id: P150
+    label: P150
+    rotation: identity
+    alignment: hard
+  P200:
+    PRO: 2.0
+    OBL: 1.0
+    id: P200
+    label: P200
+    rotation: identity
+    alignment: hard

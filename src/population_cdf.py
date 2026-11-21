@@ -71,7 +71,7 @@ def _r1_nodes_not_used(spec,nd=33,ns=8,nc=6,alignment='isotropic',retain_nodes=F
 
 def partition(spec):
     """Freeze SD interpolation panels, retaining the entire original support."""
-    table=inherited.json.loads((inherited.BASE/'sources/SD_TABLE_EXTRACT.json').read_text())
+    table=inherited.size_table()
     knots=np.log(np.asarray(table['x_Hard DOWN'][0][1:],float))
     t=spec['theta'];records=[]
     for k,comp in enumerate(spec['components']):
@@ -155,7 +155,7 @@ def scalar_reference(spec):
     t=spec['theta']
     if t['kappa']!=0:raise ValueError('REFERENCE_ONLY_CURRENT_ISOTROPIC_ATLAS')
     sx=t['sigma_ln_d']*math.sqrt(1-t['rho_latent']**2);out=[]
-    table=inherited.json.loads((inherited.BASE/'sources/SD_TABLE_EXTRACT.json').read_text())
+    table=inherited.size_table()
     breaks=np.log(np.array(table['x_Hard DOWN'][0][1:],float))
     for power in [0,3]:
         total=0.;err=0.;records=[]

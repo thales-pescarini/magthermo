@@ -10,7 +10,7 @@ from scipy.special import ndtr, log_ndtr
 from scipy.stats import qmc
 
 ROOT=Path(__file__).resolve().parents[1]
-from environment import base_root
+from environment import base_root, size_table
 BASE=base_root()
 SMAX=math.log(2.5)
 DMIN=5.
@@ -47,7 +47,7 @@ def shape_rule(n):
     return np.r_[-np.asarray(positive)[::-1],positive],np.r_[weight[::-1],weight]
 
 def sd_limit(s,alignment='isotropic'):
-    table=json.loads((BASE/'sources/SD_TABLE_EXTRACT.json').read_text())
+    table=size_table()
     log_aspect=np.log(np.asarray(table['x_Hard DOWN'][0][1:],float))
     hard=np.asarray(table['x_Hard DOWN'][1][1:],float)
     easy=np.asarray(table['x_Easy DOWN'][1][1:],float)

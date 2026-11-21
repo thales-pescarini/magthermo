@@ -1,9 +1,9 @@
 """Global joint T/log10(seconds) inference on declared complete numerical banks."""
-from portao_a.common import *
 import math
 import numpy as np
 from scipy.special import logsumexp
 from scipy import ndimage
+from portao_a.inference_modes import FIXED_SCALE,L1
 
 EPS=np.finfo(np.float64).eps
 SIGMA=.0025/math.sqrt(2.)
@@ -65,6 +65,7 @@ class GridEstimator:
         self.cell_area=np.outer(self.wT,self.well)
         self.log_cell_area=np.log(self.cell_area.ravel())
         self.protocol,self.scale=protocol,scale
+        self._profile_basis=None
 
     def validate_observations(self,observations,protocol,scale):
         if protocol!=self.protocol or scale!=self.scale:
@@ -75,30 +76,42 @@ class GridEstimator:
             raise ValueError('FINITE_PX12_XYZ_60_COMPONENT_OBSERVATIONS_REQUIRED')
         return y
 
-    def fit(self,observations,*,protocol='PX12',scale='parental_capacity',return_chi2=False):
+    def fit(self,observations,*,protocol='PX12',scale='parental_capacity',return_chi2=False,
+            amplitude_mode=FIXED_SCALE):
         y=self.validate_observations(observations,protocol,scale)
         if len(y)>256:
             raise ValueError('OBSERVATION_BLOCK_MAX_256')
+        if amplitude_mode==L1:
+            return self._fit_profiled(y,return_chi2)
+        if amplitude_mode!=FIXED_SCALE:
+            raise ValueError('UNKNOWN_AMPLITUDE_MODE')
         standardized=(y-self.origin)/self.sigma
         ynorm=np.einsum('ij,ij->i',standardized,standardized)
-        products=standardized@self.standard.T
-        chi=ynorm[:,None]+self.norm[None,:]-2*products
+        chi=standardized@self.standard.T
+        norm_sum=np.empty_like(self.norm)
+        roundoff=np.empty_like(self.norm)
         # Matrix products are used for screening. Direct residual sums settle
         # the minimizer and all possible ties despite cancellation in screening.
-        error_bound=256*EPS*(ynorm[:,None]+self.norm[None,:]+2*np.abs(products)+1.)
-        approximate_min=chi.min(axis=1)
+        # Replace each product row in place and reuse two rows for the bound.
         indices=np.full(len(y),-1,dtype=np.int64)
         counts=np.zeros(len(y),dtype=np.int64)
         minimum=np.empty(len(y),dtype=np.float64)
         ties=[]
-        for row in range(len(y)):
-            near=np.flatnonzero(chi[row]<=approximate_min[row]+2*float(error_bound[row].max()))
+        for row,chi_row in enumerate(chi):
+            np.add(ynorm[row],self.norm,out=norm_sum)
+            np.multiply(chi_row,2.,out=roundoff)
+            np.subtract(norm_sum,roundoff,out=chi_row)
+            np.abs(roundoff,out=roundoff)
+            np.add(norm_sum,roundoff,out=roundoff)
+            roundoff+=1.
+            roundoff*=256*EPS
+            near=np.flatnonzero(chi_row<=chi_row.min()+2*float(roundoff.max()))
             direct=np.empty(len(near),dtype=np.float64)
             for start in range(0,len(near),16384):
                 selected=near[start:start+16384]
                 residual=(y[row]-self.flat[selected])/self.sigma
                 direct[start:start+len(selected)]=np.einsum('ij,ij->i',residual,residual)
-            chi[row,near]=direct
+            chi_row[near]=direct
             smallest=float(direct.min())
             tolerance=64*EPS*max(1.,abs(smallest))
             minimizers=near[direct-smallest<=tolerance]
@@ -111,6 +124,73 @@ class GridEstimator:
         if return_chi2:result['chi2']=chi
         return result
 
+    def _profile_directions(self):
+        if self._profile_basis is None:
+            direction=self.flat/self.sigma
+            if not np.isfinite(direction).all():
+                raise FloatingPointError('PROFILED_CURVE_STANDARDIZATION_NOT_FINITE')
+            largest=np.max(np.abs(direction),axis=1)
+            nonzero=largest>0.
+            np.divide(direction,largest[:,None],out=direction,where=nonzero[:,None])
+            scaled_norm=np.sqrt(np.einsum('ij,ij->i',direction,direction))
+            np.divide(direction,scaled_norm[:,None],out=direction,where=nonzero[:,None])
+            self._profile_basis=direction,largest,scaled_norm
+        return self._profile_basis
+
+    def _fit_profiled(self,y,return_chi2):
+        """Global grid fit with one nonnegative weighted least-squares gain."""
+        direction,largest,scaled_norm=self._profile_directions()
+        standardized=y/self.sigma
+        ynorm=np.einsum('ij,ij->i',standardized,standardized)
+        if not np.isfinite(ynorm).all():
+            raise FloatingPointError('PROFILED_OBSERVATION_NORM_NOT_FINITE')
+        chi=standardized@direction.T
+        np.maximum(chi,0.,out=chi)
+        np.square(chi,out=chi)
+        np.subtract(ynorm[:,None],chi,out=chi)
+        indices=np.full(len(y),-1,dtype=np.int64)
+        counts=np.zeros(len(y),dtype=np.int64)
+        minimum=np.empty(len(y),dtype=np.float64)
+        gain=np.full(len(y),np.nan)
+        ties=[]
+        for row,chi_row in enumerate(chi):
+            # Screening uses the squared projection on the normalized curve.
+            # The guard covers rounding in the 60-vector normalization,
+            # dot products, clipping, square, subtraction and tie cutoff.
+            pad=1024*EPS*max(1.,ynorm[row])
+            near=np.flatnonzero(chi_row<=chi_row.min()+2*pad)
+            np.maximum(chi_row,0.,out=chi_row)
+            direct=np.empty(len(near),dtype=np.float64)
+            for start in range(0,len(near),16384):
+                selected=near[start:start+16384]
+                basis=direction[selected]
+                projection=np.maximum(0.,np.einsum('i,ji->j',standardized[row],basis))
+                # Every zero-gain candidate in this block has the same residual.
+                if not np.any(projection):
+                    projection=projection[:1]
+                    basis=basis[:1]
+                residual=standardized[row]-projection[:,None]*basis
+                direct[start:start+len(selected)]=np.einsum('ij,ij->i',residual,residual)
+            chi_row[near]=direct
+            smallest=float(direct.min())
+            tolerance=64*EPS*max(1.,abs(smallest))
+            minimizers=near[direct-smallest<=tolerance]
+            counts[row]=len(minimizers)
+            minimum[row]=smallest
+            if len(minimizers)==1:
+                index=minimizers[0]
+                indices[row]=index
+                if largest[index]>0.:
+                    value=max(0.,float(np.dot(standardized[row],direction[index])))
+                    with np.errstate(over='ignore'):
+                        amplitude=(value/scaled_norm[index])/largest[index]
+                    if np.isfinite(amplitude):
+                        gain[row]=amplitude
+            ties.append(minimizers)
+        result=dict(index=indices,tie_count=counts,minimum_chi2=minimum,minimizers=ties,amplitude=gain)
+        if return_chi2:result['chi2']=chi
+        return result
+
     def coordinates(self,indices):
         indices=np.asarray(indices,dtype=np.int64)
         answer=np.full((*indices.shape,2),np.nan,dtype=np.float64)
@@ -119,14 +199,20 @@ class GridEstimator:
         answer[valid,1]=self.ell[indices[valid]%len(self.ell)]
         return answer
 
-    def posterior(self,observation,*,protocol='PX12',scale='parental_capacity'):
-        fit=self.fit(observation,protocol=protocol,scale=scale,return_chi2=True)
+    def posterior(self,observation,*,protocol='PX12',scale='parental_capacity',
+                  amplitude_mode=FIXED_SCALE):
+        fit=self.fit(observation,protocol=protocol,scale=scale,return_chi2=True,
+                     amplitude_mode=amplitude_mode)
         if len(fit['index'])!=1:raise ValueError('ONE_OBSERVATION_FOR_SAVED_POSTERIOR')
         chi=fit['chi2'][0]
         log_mass=-.5*chi+self.log_cell_area
         log_z=float(logsumexp(log_mass))
         mass=np.exp(log_mass-log_z).reshape(len(self.T),len(self.ell))
-        return mass,self.describe(mass,fit),fit
+        description=self.describe(mass,fit)
+        if amplitude_mode==L1:
+            description.update(amplitude_mode=L1,
+                mass_kind='profile likelihood normalized on the T–ell grid with cell area')
+        return mass,description,fit
 
     def describe(self,mass,fit=None):
         mass=np.asarray(mass,dtype=np.float64)
@@ -138,6 +224,12 @@ class GridEstimator:
         et,el=float(mt@self.T),float(ml@self.ell)
         vt=float(mt@((self.T-et)**2));vl=float(ml@((self.ell-el)**2))
         cov=float(np.sum(mass*(self.T[:,None]-et)*(self.ell[None,:]-el)))
+        correlation = None
+        if vt > 0. and vl > 0.:
+            product = vt * vl
+            # The product can round to zero while its square root is representable.
+            scale = math.sqrt(product) if product > 0. else math.sqrt(vt) * math.sqrt(vl)
+            correlation = cov / scale
         prior=self.cell_area/self.cell_area.sum()
         positive=mass>0
         kl=float(np.sum(mass[positive]*np.log(mass[positive]/prior[positive])))
@@ -146,7 +238,7 @@ class GridEstimator:
         _,components=ndimage.label(peak,structure=np.ones((3,3),dtype=np.int8))
         out=dict(domain=[[float(self.T[0]),float(self.T[-1])],[float(self.ell[0]),float(self.ell[-1])]],
             posterior_sum=float(mass.sum()),mean=[et,el],variance=[vt,vl],covariance=cov,
-            correlation=cov/math.sqrt(vt*vl) if vt>0 and vl>0 else None,
+            correlation=correlation,
             HPD_T={str(p):hpd(self.T,mt,p) for p in (.68,.95)},
             HPD_ell={str(p):hpd(self.ell,ml,p) for p in (.68,.95)},
             edge_cell_mass=dict(T_low=float(mt[0]),T_high=float(mt[-1]),ell_low=float(ml[0]),ell_high=float(ml[-1])),

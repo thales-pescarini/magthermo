@@ -4,7 +4,6 @@ The frozen adapter and its R12/R48/R192 rules remain unchanged. New rules
 require both a source-bound unit contract and a verified worker opt-in.
 Manufactured moment tests do not certify thermomagnetic quadrature accuracy.
 """
-from contextlib import contextmanager
 import numpy as np
 from portao_a.common import sha, digest
 
@@ -75,35 +74,29 @@ def resolve_rule(count, extensions=None):
         raise ValueError('HAAR_PRODUCT_NOT_AN_ARCHIVED_RULE_OVERRIDE')
     if count not in ARCHIVED_COUNTS:
         raise ValueError('HAAR_PRODUCT_PROFILE_NOT_DECLARED')
-    from portao_a.forward import haar
-    return haar(count)
+    return archived_rule(count)
 
 
-def validate_request(request):
-    specs = request['specs']
-    for spec in specs:
-        validate_spec(spec)
-    active = {VERSION in spec.get('numeric_extensions', {}) for spec in specs}
-    if len(active) != 1:
-        raise ValueError('ONE_HAAR_EXTENSION_SET_PER_FAMILY_REQUIRED')
-    enabled = active.pop()
-    if bool(request.get('haar_product_patch')) != enabled:
-        raise ValueError('HAAR_PRODUCT_WORKER_OPT_IN_REQUIRED')
-    if enabled and request.get('haar_product_patch_sha256') != sha(__file__):
-        raise ValueError('HAAR_PRODUCT_WORKER_SOURCE_MISMATCH')
-    return enabled
-
-
-@contextmanager
-def installed():
-    from portao_a import forward
-    original = forward.haar
-
-    def extended(count):
-        return product(count) if count in PROFILES else original(count)
-
-    forward.haar = extended
-    try:
-        yield
-    finally:
-        forward.haar = original
+def archived_rule(n):
+    if n in (12,48):
+        from e1_core import haar_orientations
+        return haar_orientations(n)
+    assert n == 192
+    na,nz,ng = 6,4,8
+    zs,ws = np.polynomial.legendre.leggauss(nz)
+    def rz(a):
+        c,s = np.cos(a),np.sin(a)
+        return np.array([[c,-s,0.],[s,c,0.],[0.,0.,1.]])
+    rows = []
+    for ia in range(na):
+        for iz,(z,wz) in enumerate(zip(zs,ws)):
+            beta = np.arccos(z)
+            ry = np.array([[z,0.,np.sin(beta)],[0.,1.,0.],[-np.sin(beta),0.,z]])
+            for ig in range(ng):
+                rows.append(dict(id=f'F1_R192_{len(rows):03}',
+                    R_fs=(rz(2*np.pi*ia/na) @ ry @ rz(2*np.pi*ig/ng)).tolist(),
+                    number_fraction=float(wz/(2*na*ng)),
+                    euler_haar=dict(alpha_index=ia,alpha_count=na,cos_beta_index=iz,
+                                    cos_beta_count=nz,gamma_index=ig,gamma_count=ng)))
+    assert len(rows)==192 and abs(sum(r['number_fraction'] for r in rows)-1.) < 1e-14
+    return rows

@@ -1,5 +1,7 @@
 """Deterministic positive-weight reductions with explicit missing support."""
-from portao_a.common import *
+from pathlib import Path
+import os
+from portao_a.common import read, sha, digest, fsync_directory, save
 import math
 import numpy as np
 

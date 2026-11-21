@@ -1,5 +1,4 @@
 """Append interior lateral anchors when a verified fold lies near a step edge."""
-from portao_a.common import *
 import contextlib
 import numpy as np
 from portao_a import field_events

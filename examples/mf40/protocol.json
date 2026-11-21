@@ -1,0 +1,90 @@
+{
+  "population": "MF",
+  "known_event_temperature_C": 40,
+  "selected_fraction_of_single_domain_capacity": 0.13661972220415536,
+  "moment_unit": "partial population moment divided by full frozen parent capacity",
+  "shape_nodes_log_aspect_ratio": [
+    -0.13976194237515863,
+    0.13976194237515863
+  ],
+  "diameter_node_count": 33,
+  "specimen_rotation_node_count": 12,
+  "rotation_rule": "F1_R12_EULER_ZYZ_3_2_2_V1",
+  "crystal_orientations": [
+    4,
+    16
+  ],
+  "thermal_step_C": 5,
+  "field_substeps": 4,
+  "room_temperature_C": 20,
+  "event_field_T": [
+    5e-05,
+    0,
+    0
+  ],
+  "field_switch_time_s": 1,
+  "thermal_ramp_rate_C_per_min": 20,
+  "room_temperature_wait_s": 120,
+  "laboratory_field_T": [
+    0,
+    0,
+    0
+  ],
+  "laboratory_hold_s": 1200,
+  "protocol": "PX12",
+  "readings_C_after_NRM": [
+    30.0,
+    50.0,
+    70.0,
+    90.0,
+    110.0,
+    130.0,
+    160.0,
+    200.0,
+    250.0,
+    300.0,
+    350.0,
+    375.0,
+    400.0,
+    425.0,
+    450.0,
+    475.0,
+    500.0,
+    525.0,
+    550.0
+  ],
+  "curve_axes": [
+    "log10_duration_s",
+    "model",
+    "reading",
+    "component"
+  ],
+  "curve_models": [
+    "F",
+    "N1"
+  ],
+  "curve_components": [
+    "x",
+    "y",
+    "z"
+  ],
+  "log10_duration_s": {
+    "start": 0,
+    "step": 0.125,
+    "count": 121
+  },
+  "sigma": 0.0017677669529663686,
+  "standard_normal_generator": "PCG64",
+  "seed": 20261112,
+  "noise_model_order": [
+    "MF/F",
+    "MF/N1"
+  ],
+  "replicates_per_model": 2048,
+  "block_size": 512,
+  "noise_sha256_little_endian_float64_c_order": "9a3a0cbad62b0e5b1bd0ac770b4fd8d05a4e86de322bd7c10a607dfab2bbd962",
+  "curve_file_sha256": {
+    "mf_c4.npy": "84c7a3eeafeac68967e96e226e04498decef146d3ba5345cc385c311e5e2f7da",
+    "mf_c16.npy": "a1f65d95fc8b412695d9cd1b13cd8070ce47ce2c2f3abce70246c50c2d73edb6"
+  }
+}

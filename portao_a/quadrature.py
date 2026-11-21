@@ -1,5 +1,6 @@
 """Complete positive-area crystal cells; children replace complete parents."""
-from portao_a.common import *
+from pathlib import Path
+from portao_a.common import read
 import math
 import numpy as np
 
@@ -14,7 +15,7 @@ def area(vertices):
 def initial(level=2):
     if level not in (1,2):
         raise ValueError('INITIAL_LEVEL_1_OR_2')
-    source=read(PACKAGE/'autoridade/C64/QUADRATURA_C.json')
+    source=read(Path(__file__).resolve().parents[1] / 'config/crystal_orientations.json')
     rows=[dict(v) for v in source['nodes'] if v['level']==level]
     assert len(rows)==4**level
     validate(rows)

@@ -2,6 +2,7 @@
 import unittest
 import numpy as np
 from portao_a.inference import GridEstimator,posterior_discretization,edges,marginal_cdf
+from portao_a.inference_modes import FIXED_SCALE,L1
 
 
 class InferenceTests(unittest.TestCase):
@@ -38,6 +39,59 @@ class InferenceTests(unittest.TestCase):
         self.assertEqual(result['tie_count'][0],1)
         self.assertEqual(result['index'][0],4)
 
+    def test_L1_matches_direct_weighted_profile_with_one_gain_across_all_readouts(self):
+        rng=np.random.default_rng(1034)
+        T=np.linspace(40,300,5);ell=np.linspace(0,15,3)
+        curves=rng.normal(size=(len(T),len(ell),60))
+        curves[0,0]=0.
+        sigma=np.linspace(.15,.39,60)
+        estimator=GridEstimator(T,ell,curves,sigma)
+        observations=2.4*estimator.flat[[2,7,13]]+rng.normal(0,.03,(3,60))
+        fit=estimator.fit(observations,amplitude_mode=L1,return_chi2=True)
+        templates=estimator.flat/sigma
+        whitened=observations/sigma
+        product=np.sum(whitened[:,None,:]*templates[None,:,:],axis=2)
+        norm=np.sum(templates**2,axis=1)
+        gain=np.maximum(0.,np.divide(product,norm,out=np.zeros_like(product),where=norm>0.))
+        direct=np.sum(((observations[:,None,:]-gain[:,:,None]*estimator.flat)/sigma)**2,axis=2)
+        index=direct.argmin(axis=1)
+        np.testing.assert_array_equal(fit['index'],index)
+        np.testing.assert_allclose(fit['chi2'],direct,rtol=2e-13,atol=2e-12)
+        np.testing.assert_allclose(fit['minimum_chi2'],direct.min(axis=1),rtol=2e-13,atol=2e-12)
+        np.testing.assert_allclose(fit['amplitude'],gain[np.arange(len(index)),index],rtol=2e-15)
+        fixed=estimator.fit(observations,amplitude_mode=FIXED_SCALE,return_chi2=True)
+        default=estimator.fit(observations,return_chi2=True)
+        np.testing.assert_array_equal(fixed['chi2'],default['chi2'])
+        self.assertNotIn('amplitude',fixed)
+
+    def test_L1_resolves_cancellation_and_preserves_equal_positive_rays(self):
+        rng=np.random.default_rng(993)
+        truth=rng.normal(size=60)
+        curves=np.zeros((2,2,60))
+        curves[0,0]=truth
+        curves[0,1]=truth+rng.normal(0,1e-10,60)
+        curves[1,0]=-.5*truth
+        estimator=GridEstimator([40.,300.],[0.,15.],curves)
+        mass,description,fit=estimator.posterior(3.*truth,amplitude_mode=L1)
+        np.testing.assert_array_equal(fit['index'],[0])
+        np.testing.assert_allclose(fit['amplitude'],[3.],rtol=2e-15)
+        self.assertAlmostEqual(float(mass.sum()),1.)
+        self.assertEqual(description['amplitude_mode'],L1)
+        curves[0,1]=.25*truth
+        estimator=GridEstimator([40.,300.],[0.,15.],curves)
+        tied=estimator.fit(3.*truth,amplitude_mode=L1)
+        np.testing.assert_array_equal(tied['minimizers'][0],[0,1])
+        self.assertTrue(np.isnan(tied['amplitude'][0]))
+
+    def test_L1_negative_projection_and_zero_template_share_boundary_fit(self):
+        curves=np.ones((2,2,60))
+        curves[1,1]=0.
+        estimator=GridEstimator([40.,300.],[0.,15.],curves,sigma=1.)
+        fit=estimator.fit(-np.ones(60),amplitude_mode=L1,return_chi2=True)
+        np.testing.assert_array_equal(fit['minimizers'][0],np.arange(4))
+        np.testing.assert_array_equal(fit['chi2'],[[60.]*4])
+        self.assertTrue(np.isnan(fit['amplitude'][0]))
+
     def test_uniform_log_time_prior_and_likelihood_constant(self):
         T=np.array([40.,100.,300.]);ell=np.array([0.,1.,15.])
         e=GridEstimator(T,ell,np.zeros((3,3,60)))
@@ -48,6 +102,20 @@ class InferenceTests(unittest.TestCase):
         np.testing.assert_allclose(mass,shifted,atol=2e-14,rtol=0)
         self.assertAlmostEqual(marginal_cdf(ell,mass.sum(axis=0),7.5),.5,places=13)
         self.assertLess(abs(description['posterior_to_prior_KL_nats']),1e-14)
+
+    def test_positive_variances_with_underflowed_product_keep_correlation(self):
+        e = self.make()
+        mass = np.zeros((3, 3))
+        mass[0, 0] = 1.
+        mass[2, 2] = 1e-200
+        description = e.describe(mass)
+        vt, vl = description['variance']
+        self.assertGreater(vt, 0.)
+        self.assertGreater(vl, 0.)
+        self.assertEqual(vt * vl, 0.)
+        self.assertAlmostEqual(description['correlation'], 1., places=14)
+        mass[2, 2] = 0.
+        self.assertIsNone(e.describe(mass)['correlation'])
 
     def test_two_separate_modes_retained(self):
         e=self.make(np.linspace(40,300,9),np.linspace(0,15,9))

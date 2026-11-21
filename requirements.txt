@@ -1,0 +1,7 @@
+numpy==2.4.6
+scipy==1.17.1
+mpmath==1.4.1
+PyYAML==6.0.3
+jax==0.10.1
+jaxlib==0.10.1
+matplotlib==3.10.9

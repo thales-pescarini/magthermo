@@ -4,7 +4,7 @@ The inherited catalog and hint selector handled temperature ramps only. This
 extends the same geometric hint mechanism to a fixed-temperature straight
 field segment. No event map, rate, occupation, split or physical time changes.
 """
-from portao_a.common import *
+import hashlib
 import contextlib
 import copy
 import inspect

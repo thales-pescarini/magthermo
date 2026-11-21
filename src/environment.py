@@ -1,4 +1,4 @@
-"""Portable project dependencies; importing never invokes a historical driver."""
+"""Locate the bundled physical model and user-supplied single-domain size limits."""
 import json
 import os
 from pathlib import Path
@@ -6,13 +6,25 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def configuration():
-    path = ROOT / 'config' / 'local.json'
-    data = json.loads(path.read_text()) if path.is_file() else {}
-    project = Path(os.environ.get('MAGTHERMO_PROJECT_ROOT', data.get('project_root', ROOT.parent)))
-    return {**data, 'project_root': project.resolve()}
-
-
 def base_root():
-    config = configuration()
-    return config['project_root'] / config.get('base_relative', 'STAGE6_E1_WP0_WP1_2026-10-22')
+    return ROOT / "portable_runtime" / "STAGE6_E1_WP0_WP1_2026-10-22"
+
+
+def size_table():
+    """Read the two critical-size curves from a local SDCC workbook or its JSON export."""
+    filename = os.environ.get("MAGTHERMO_SD_TABLE")
+    if not filename:
+        raise FileNotFoundError("Set MAGTHERMO_SD_TABLE to TM_Crit_Sizes.xls or its JSON export.")
+    path = Path(filename)
+    if path.suffix.lower() == ".json":
+        return json.loads(path.read_text())
+    if path.suffix.lower() != ".xls":
+        raise ValueError("Expected an Excel .xls workbook or its JSON export.")
+    import xlrd
+
+    with xlrd.open_workbook(str(path), on_demand=True) as workbook:
+        tables = {}
+        for name in ("x_Hard DOWN", "x_Easy DOWN"):
+            sheet = workbook.sheet_by_name(name)
+            tables[name] = [sheet.row_values(i) for i in range(sheet.nrows)]
+    return tables
