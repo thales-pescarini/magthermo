@@ -14,6 +14,8 @@ python examples/mf40/reproduce.py
 
 The script writes [results.csv](results.csv) and [quadrature.png](quadrature.png). Use `--output DIRECTORY` to choose another output directory. Each CSV row represents one true duration and one model. The columns give the noiseless fits, counts of tied noisy fits, and the full-sample and block-specific values of the quantities below.
 
+To redraw the figure from the saved table, run `python examples/mf40/plot_quadrature.py` from the repository root.
+
 ## Estimator and decision rule
 
 For each model, the grid is $\ell=\log_{10}(t/\mathrm{s})=0,0.125,\ldots,15$. At every true grid point, 2,048 noisy observations are formed by adding independent Gaussian errors to the 60 components of its C16 curve. The component standard deviation is $0.0025/\sqrt{2}$ in parent-capacity units. Within each model the same noise vectors are reused at all durations, so the cases have correlated noise. The generated values are checked against the SHA-256 of the original MF noise, in little-endian float64 C order.

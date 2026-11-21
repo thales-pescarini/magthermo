@@ -5,7 +5,7 @@ import warnings
 import matplotlib.pyplot as plt
 import matplotlib.patheffects as effects
 import numpy as np
-from matplotlib.patches import Ellipse
+from matplotlib.patches import Circle, Ellipse
 from scipy.constants import Boltzmann
 
 from gate1_verified_methods import riem
@@ -90,42 +90,63 @@ def grain_geometry(model):
     return fig
 
 
+def lower_hemisphere_xy(directions):
+    """Lambert equal-area projection; the equator has unit radius."""
+    u = np.asarray(directions)
+    if np.any(u[..., 2] > 1e-12):
+        raise ValueError("The projection requires directions in the lower hemisphere.")
+    return u[..., :2] / np.sqrt(1. - u[..., 2:3])
+
+
+def cubic_edges(ax):
+    """Project directions from the crystal center to the visible edges of a cube."""
+    corners = np.array([[-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1]], dtype=float)
+    for start, adjacent in zip(corners, np.roll(corners, -1, axis=0)):
+        equator = np.array([start[0], start[1], 0.])
+        for end in (adjacent, equator):
+            edge = np.linspace(start, end, 81)
+            edge /= np.linalg.norm(edge, axis=1, keepdims=True)
+            x, y = lower_hemisphere_xy(edge).T
+            line, = ax.plot(x, y, color="white", lw=1.45, ls=(0, (3.3, 2.1)), zorder=3)
+            line.set_path_effects([effects.withStroke(linewidth=2.4, foreground="#42505c")])
+    return line
+
+
 def energy_landscape(model, data):
-    fig = plt.figure(figsize=(9.6, 4.8), layout="constrained")
-    grid = fig.add_gridspec(1, 2, width_ratios=(1.65, 1))
-    sphere = fig.add_subplot(grid[0], projection="mollweide")
+    fig = plt.figure(figsize=(9.6, 5.25), layout="constrained")
+    grid = fig.add_gridspec(1, 2, width_ratios=(1.38, 1.))
+    disk = fig.add_subplot(grid[0])
     barrier = fig.add_subplot(grid[1])
     points = data["points"]
     energies = np.array([p["energy_J_m3"] for p in points])
     u = np.array([p["direction"] for p in points])
-    lon = np.arctan2(u[:, 1], u[:, 0])
-    lat = np.arcsin(u[:, 2])
-    lon_grid, lat_grid = np.meshgrid(np.linspace(-np.pi, np.pi, 241),
-                                     np.linspace(-np.pi/2, np.pi/2, 121))
-    directions = np.dstack((np.cos(lat_grid)*np.cos(lon_grid),
-                             np.cos(lat_grid)*np.sin(lon_grid), np.sin(lat_grid)))
+
+    radius, angle = np.meshgrid(np.linspace(0., 1., 129), np.linspace(0., 2*np.pi, 361),
+                                indexing="ij")
+    x, y = radius * np.cos(angle), radius * np.sin(angle)
+    scale = np.sqrt(2. - radius**2)
+    directions = np.dstack((x * scale, y * scale, radius**2 - 1.))
     density = np.array([model.energy_np(v) for v in directions.reshape(-1, 3)])
-    relative = (density.reshape(lon_grid.shape) - energies.min()) / 1000
-    surface = sphere.contourf(lon_grid, lat_grid, relative, levels=np.linspace(0, 12, 25),
-                              cmap="viridis")
-    sphere.set_longitude_grid(60)
-    sphere.set_latitude_grid(30)
-    sphere.tick_params(labelsize=8)
-    for tick in sphere.get_xticklabels():
-        tick.set_color("white")
-        tick.set_path_effects([effects.withStroke(linewidth=1.6, foreground="#384452")])
-    sphere.grid(color="white", alpha=.32, lw=.65)
-    sphere.set_title("Magnetization directions in the crystal frame")
+    relative = (density.reshape(radius.shape) - energies.min()) / 1000
+    surface = disk.contourf(x, y, relative, levels=np.linspace(0., 12., 25), cmap="viridis")
+    disk.plot([-1, 1], [0, 0], lw=.65, color="#24343e", alpha=.52)
+    disk.plot([0, 0], [-1, 1], lw=.65, color="#24343e", alpha=.52)
+    wire = cubic_edges(disk)
+    disk.add_patch(Circle((0, 0), 1., fill=False, ec="#223441", lw=1.25, zorder=4))
+    disk.text(1.025, 0, "[100]", va="center", fontsize=9)
+    disk.text(0., 1.025, "[010]", ha="center", va="bottom", fontsize=9)
+    disk.set(xlim=(-1.08, 1.21), ylim=(-1.04, 1.13), aspect="equal",
+             title="Magnetization directions in the crystal frame")
+    disk.set_axis_off()
+
     indices = np.array([p["index"] for p in points])
+    markers = []
     for index, label, marker, color in [(0, "Minimum", "o", "#f7fbff"), (1, "Saddle", "D", "#ffb260"),
                                        (2, "Maximum", "X", "#ef82a7")]:
-        keep = indices == index
-        sphere.scatter(lon[keep], lat[keep], s=52, marker=marker, facecolor=color,
-                       edgecolor="#14222c", linewidth=.95, zorder=4, label=label)
-    sphere.legend(loc="lower center", bbox_to_anchor=(.5, -.21), ncols=3,
-                  columnspacing=.8, handletextpad=.25, fontsize=9)
-    fig.colorbar(surface, ax=sphere, location="bottom", shrink=.8, pad=.11,
-                 aspect=33, ticks=[0, 3, 6, 9, 12], label="Energy above the deepest minimum (kJ m⁻³)")
+        visible = (indices == index) & (u[:, 2] <= 0.)
+        px, py = lower_hemisphere_xy(u[visible]).T
+        markers.append(disk.scatter(px, py, s=54, marker=marker, facecolor=color,
+                                    edgecolor="#14222c", lw=1.05, zorder=6, label=label))
 
     channel = data["connections"][0]
     a, b = channel["minima"]
@@ -134,14 +155,18 @@ def energy_landscape(model, data):
         path = np.asarray(path)
         np.testing.assert_allclose(path[-1], u[minimum], rtol=0, atol=1e-6)
         path = path / np.linalg.norm(path, axis=1, keepdims=True)
-        line, = sphere.plot(np.arctan2(path[:, 1], path[:, 0]), np.arcsin(path[:, 2]),
-                            color="white", lw=1.65, zorder=3)
-        line.set_path_effects([effects.withStroke(linewidth=3.0, foreground="#384452")])
+        px, py = lower_hemisphere_xy(path).T
+        descent, = disk.plot(px, py, color="#ff9c51", lw=2., zorder=5)
+        descent.set_path_effects([effects.withStroke(linewidth=3.25, foreground="#333b42")])
     ids = [a, saddle, b]
     for idx, label in zip(ids, ("A", "S", "B")):
-        sphere.annotate(label, (lon[idx], lat[idx]), xytext=(5, 6), textcoords="offset points",
-                        color="white", weight="bold", fontsize=9,
-                        bbox=dict(boxstyle="round,pad=0.1", fc="#1b303d", ec="none", alpha=.8))
+        disk.annotate(label, lower_hemisphere_xy(u[idx]), xytext=(6, 6), textcoords="offset points",
+                      color="white", weight="bold", fontsize=9, zorder=7,
+                      bbox=dict(boxstyle="round,pad=0.1", fc="#1b303d", ec="none", alpha=.85))
+    fig.legend([*markers, wire, descent], ["Minimum", "Saddle", "Maximum", "Cubic edges", "Descent path"],
+               loc="outside lower center", ncols=5, columnspacing=1.55, handletextpad=.45, fontsize=9)
+    fig.colorbar(surface, ax=disk, location="bottom", shrink=.84, pad=.045, aspect=33,
+                 ticks=[0, 3, 6, 9, 12], label="Energy above the deepest minimum (kJ m⁻³)")
     heights = (energies[ids] - energies.min()) / 1000
     volume = np.pi / 6 * (45e-9)**3
     delta = (energies[saddle] - energies[[a, b]]) * volume / (Boltzmann * (model.T+273.15))

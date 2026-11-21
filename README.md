@@ -28,9 +28,9 @@ The first two terms depend on crystal orientation. The demagnetizing tensor $N$ 
 
 MAGTHERMO searches the sphere of moment directions for stationary points and classifies them by the two curvatures tangent to the sphere. Minima are stable moment directions. Descending from opposite sides of a first-order saddle identifies the minima it connects. The same saddle can present different barriers to a grain starting in different minima.
 
-![Energy map on the sphere with all minima, saddles and maxima, and the two directional barriers across one mapped saddle](examples/model/landscape.png)
+![Circular equal-area energy plot with dashed white cubic edges, two descent paths and barriers across their common saddle](examples/model/landscape.png)
 
-**Figure 2.** The grain in Figure 1 has four minima, four saddles and two maxima. The white paths follow downhill trajectories from opposite sides of saddle S to minima A and B. For a volume-equivalent diameter of 45 nm, the barriers in units of $k_BT$ are 22.4 from A and 19.4 from B.
+**Figure 2.** The disk shows the lower crystal hemisphere in an equal-area projection. Dashed white lines trace the projected edges of the cubic unit cell. Solid orange paths descend from saddle S to minima A and B. The full sphere contains four minima, four saddles and two maxima. For a volume-equivalent diameter of 45 nm, the barriers through S are 22.4 from A and 19.4 from B in units of $k_BT$.
 
 For grain volume $V$, the barrier from minimum $i$ through saddle $s$ is $V(e_s-e_i)$. Thermal transition rates across the saddles define a master equation for the occupation probabilities. As temperature or field changes, the software tracks the minima and transfers probability through resolved state mergers and splits. The occupations at the end of each step supply the initial state for the next. [Landscape solver](src/r1_landscape.py) · [Occupation transport](src/er2_transport.py)
 
