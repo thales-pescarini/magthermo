@@ -30,7 +30,7 @@ MAGTHERMO searches the sphere of moment directions for stationary points and cla
 
 ![Circular equal-area energy plot with dashed white cubic edges, two descent paths and barriers across their common saddle](examples/model/landscape.png)
 
-**Figure 2.** The disk shows the lower crystal hemisphere in an equal-area projection. Dashed white lines trace the projected edges of the cubic unit cell. Solid orange paths descend from saddle S to minima A and B. The full sphere contains four minima, four saddles and two maxima. For a volume-equivalent diameter of 45 nm, the barriers through S are 22.4 from A and 19.4 from B in units of $k_BT$.
+**Figure 2.** Energy landscape of an oblate single-domain magnetite grain with a volume-equivalent diameter of 45 nm. Its polar diameter is 39.9 nm along [531] and its equatorial diameter is 47.8 nm (polar/equatorial ratio 0.835). The grain is at 80 °C in a 50 µT field along [100]. The disk shows the lower crystal hemisphere in an equal-area projection. Dashed white lines trace the projected edges of the cubic unit cell. Orange paths descend from saddle S to minima A and B. The full sphere contains four minima, four saddles and two maxima. The barriers through S are 22.4 and 19.4 $k_BT$ from A and B, respectively.
 
 For grain volume $V$, the barrier from minimum $i$ through saddle $s$ is $V(e_s-e_i)$. Thermal transition rates across the saddles define a master equation for the occupation probabilities. As temperature or field changes, the software tracks the minima and transfers probability through resolved state mergers and splits. The occupations at the end of each step supply the initial state for the next. [Landscape solver](src/r1_landscape.py) · [Occupation transport](src/er2_transport.py)
 
@@ -106,8 +106,6 @@ PYTHONPATH=src:. python -m unittest discover -s tests
 
 To calculate new size and shape weights from the external workbook, install `xlrd==2.0.2` and set `MAGTHERMO_SD_TABLE` to the path of `TM_Crit_Sizes.xls`. The saved-curve example includes its required numerical inputs. [Data sources and file checksums](SOURCES.md)
 
-## Project history and attribution
-
-Thales Pescarini owns and maintains MAGTHERMO. The first public release includes 36 scientific changes selected from the research repository. These commits retain the original authors, dates, messages and selected file contents. Filtering private project records from the original trees changed the commit hashes. The maintainer keeps a private table linking each published historical commit to its original hash.
+## Attribution and licensing
 
 The forward model uses the material laws and ellipsoidal demagnetizing factors from the Single Domain Comprehensive Calculator (SDCC) by Brendan Cych. Its underlying model is described by Cych, Paterson, Nagy and Williams (2025). Three unmodified SDCC files from v0.4.3 are included. The upstream README and license file specify CC BY-SA 4.0. The accompanying source record documents the conflicting MIT classifier in the package metadata. This release adds no license for original MAGTHERMO code. [SDCC paper](https://doi.org/10.1093/gji/ggaf149) · [Software attribution and source files](SOURCES.md) · [SDCC license](LICENSES/SDCC-CC-BY-SA-4.0.txt)
