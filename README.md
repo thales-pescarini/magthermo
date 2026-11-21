@@ -14,8 +14,8 @@ $$
 e(\mathbf{u}) =
 K_1(u_x^2u_y^2+u_y^2u_z^2+u_z^2u_x^2)
 +K_2u_x^2u_y^2u_z^2
-+\frac{\mu_0 M_s^2}{2}\,\mathbf{u}^{\mathsf T}N\mathbf{u}
--M_s\,\mathbf B\cdot\mathbf u .
++\frac{\mu_0 M_s^2}{2} \mathbf{u}^{\mathsf T}N\mathbf{u}
+-M_s (\mathbf B\cdot\mathbf u) .
 $$
 
 The first two terms depend on crystal orientation. The demagnetizing tensor $N$ sets the shape contribution, and the applied field $\mathbf B$ favors alignment with the field. The model evaluates the magnetocrystalline constants $K_1$, $K_2$ and saturation magnetization $M_s$ at the grain temperature.
@@ -30,7 +30,7 @@ MAGTHERMO searches the sphere of moment directions for stationary points and cla
 
 ![Energy map on the sphere with all minima, saddles and maxima, and the two directional barriers across one mapped saddle](examples/model/landscape.png)
 
-**Figure 2.** The grain in Figure 1 has four minima, four saddles and two maxima. The white paths follow downhill trajectories from opposite sides of saddle S to minima A and B. At $d=45$ nm, escape through S costs $22.4\,k_BT$ from A and $19.4\,k_BT$ from B.
+**Figure 2.** The grain in Figure 1 has four minima, four saddles and two maxima. The white paths follow downhill trajectories from opposite sides of saddle S to minima A and B. For a volume-equivalent diameter of 45 nm, the barriers in units of $k_BT$ are 22.4 from A and 19.4 from B.
 
 For grain volume $V$, the barrier from minimum $i$ through saddle $s$ is $V(e_s-e_i)$. Thermal transition rates across the saddles define a master equation for the occupation probabilities. As temperature or field changes, the software tracks the minima and transfers probability through resolved state mergers and splits. The occupations at the end of each step supply the initial state for the next. [Landscape solver](src/r1_landscape.py) · [Occupation transport](src/er2_transport.py)
 
