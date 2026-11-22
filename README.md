@@ -22,7 +22,7 @@ The first two terms depend on crystal orientation. The demagnetizing tensor $N$ 
 
 ![Cross-section of an oblate magnetite grain and the change in cubic, shape and Zeeman energies as its moment rotates](examples/model/grain.png)
 
-**Figure 1.** An oblate magnetite grain at 80 °C has a short axis parallel to [531] and a 50 µT field along [100]. The arrow $\mathbf{u}$ shows a possible moment direction. The curves follow one full turn in the plane shown, relative to the energy at 0°. The field contribution has its own scale in J m⁻³.
+**Figure 1.** An oblate magnetite grain at 80 °C has a short axis parallel to [531] and a 50 µT field along [100]. The section (a) shows a possible moment direction, $\mathbf{u}$. Panels b and c follow one full turn in this plane, relative to the energy at 0°. Panel b shows the cubic, shape and total energy densities in kJ m⁻³. Panel c shows the Zeeman term in J m⁻³. [PDF](examples/model/grain.pdf)
 
 ## Energy landscape and transitions between states
 
@@ -30,7 +30,7 @@ MAGTHERMO searches the sphere of moment directions for stationary points and cla
 
 ![Circular equal-area energy plot with dashed white cubic edges, two descent paths and barriers across their common saddle](examples/model/landscape.png)
 
-**Figure 2.** Energy landscape of an oblate single-domain magnetite grain with a volume-equivalent diameter of 45 nm. Its polar diameter is 39.9 nm along [531] and its equatorial diameter is 47.8 nm (polar/equatorial ratio 0.835). The grain is at 80 °C in a 50 µT field along [100]. The disk shows the lower crystal hemisphere in an equal-area projection. Dashed white lines trace the projected edges of the cubic unit cell. Orange paths descend from saddle S to minima A and B. The full sphere contains four minima, four saddles and two maxima. The barriers through S are 22.4 and 19.4 $k_BT$ from A and B, respectively.
+**Figure 2.** Energy landscape of an oblate single-domain magnetite grain with a volume-equivalent diameter of 45 nm. Its polar diameter is 39.9 nm along [531] and its equatorial diameter is 47.8 nm (polar/equatorial ratio 0.835). The grain is at 80 °C in a 50 µT field along [100]. The disk (a) shows the lower crystal hemisphere in an equal-area projection. Dashed white lines trace the projected edges of the cubic unit cell. Red-orange paths descend from saddle S to minima A and B. The full sphere contains four minima, four saddles and two maxima. The barriers through S (b) are 22.4 and 19.4 $k_BT$ from A and B, respectively. [PDF](examples/model/landscape.pdf)
 
 For grain volume $V$, the barrier from minimum $i$ through saddle $s$ is $V(e_s-e_i)$. Thermal transition rates across the saddles define a master equation for the occupation probabilities. As temperature or field changes, the software tracks the minima and transfers probability through resolved state mergers and splits. The occupations at the end of each step supply the initial state for the next. [Landscape solver](src/r1_landscape.py) · [Occupation transport](src/er2_transport.py)
 
@@ -40,7 +40,7 @@ Size, shape and orientation play different roles. Grain volume scales both the a
 
 ![Size and shape contributions to the modeled magnetofossil population and four quadrature cells for internal crystal orientation](examples/model/population.png)
 
-**Figure 3.** The magnetofossil (MF) model uses measured lengths and widths with an assumed prolate geometry. Color shows the fraction of the parent magnetic capacity in each size and shape bin. The four cells at right sample the direction of the shape axis in the crystal. Their weights are fractions of solid angle. The model integrates whole-grain rotations separately, assuming random specimen orientations.
+**Figure 3.** The magnetofossil (MF) model uses measured lengths and widths with an assumed prolate geometry. Colors in panel a show the fraction of the parent magnetic capacity in each size and shape bin. The four cells in panel b sample the direction of the shape axis in the crystal. Their weights are fractions of solid angle. The model integrates whole-grain rotations separately, assuming random specimen orientations. [PDF](examples/model/population.pdf)
 
 ## Forward curves and the temperature–duration grid
 
@@ -48,7 +48,7 @@ The protocol starts with remanence along specimen $z$. A field of 50 µT along $
 
 ![Two modeled vector demagnetization curves linked to their positions on the event temperature and log-duration grid](examples/model/forward_grid.png)
 
-**Figure 4.** At the same event temperature, the longer hold leaves less of the initial $z$ remanence and a larger $x$ component along the event field. The two marked grid points correspond to the curves at left. Color shows only the initial $z$ component. Each of the 14 × 121 grid points contains a full sequence of 20 three-component readings. These saved F-model calculations cover the full retained MF population using 17 shape nodes, 33 diameters per shape, four internal orientations and 12 specimen rotations. They illustrate the forward calculation at this resolution. [Vector curves](examples/model/forward_curves.csv) · [Grid values shown](examples/model/forward_grid.csv)
+**Figure 4.** At 160 °C, the longer hold leaves less of the initial $z$ remanence (a) and a larger $x$ component along the event field (b). The two marked grid points in panel c correspond to these curves. Color shows only the initial $z$ component. Each of the 14 × 121 grid points contains a full sequence of 20 three-component readings. These saved F-model calculations cover the full retained MF population using 17 shape nodes, 33 diameters per shape, four internal orientations and 12 specimen rotations. They illustrate the forward calculation at this resolution. [Vector curves](examples/model/forward_curves.csv) · [Grid values shown](examples/model/forward_grid.csv) · [PDF](examples/model/forward_grid.pdf)
 
 ## Joint inversion of event temperature and duration
 
@@ -56,13 +56,13 @@ For one observed curve, the estimator compares all 60 measured components with t
 
 ![Weighted misfit over temperature and duration for a test with a fitted amplitude and the same test with a fixed amplitude](examples/model/joint_fit.png)
 
-**Figure 5.** An analytic test isolates this ambiguity. Two signal components are proportional to temperature and log duration, respectively. With a fitted amplitude, all 14 marked pairs match the same input exactly. Fixing the amplitude gives one optimum at the input pair. The same estimator runs on physical curves. Joint recovery on the refined full-population physical reference and validation on rock specimens remain under evaluation. [Estimator](portao_a/inference.py) · [Estimator tests](portao_a/tests/test_inference.py)
+**Figure 5.** An analytic test isolates this ambiguity. Two signal components are proportional to temperature and log duration, respectively. With a fitted amplitude (a), all 14 marked pairs match the same input exactly. Fixing the amplitude (b) gives one optimum at the input pair. The same estimator runs on physical curves. Joint recovery on the refined full-population physical reference and validation on rock specimens remain under evaluation. [Estimator](portao_a/inference.py) · [Estimator tests](portao_a/tests/test_inference.py) · [PDF](examples/model/joint_fit.pdf)
 
 ## Crystal quadrature sensitivity at 40 °C
 
 ![Effect of crystal orientation quadrature on duration recovery for MF/F and MF/N1](examples/mf40/quadrature.png)
 
-**Figure 6.** Event temperature was known (40 °C). The synthetic curves represent part of the MF magnetofossil population near a grain aspect ratio of 1.15, accounting for 13.662% of its modeled single-domain magnetic capacity. Both fits use 12 specimen rotations, a 50 µT event field and a fixed magnetization scale. C16 (16 crystal orientations) supplies the synthetic signal and serves as the operational reference for this comparison. At each of 121 durations per model, C4 (four crystal orientations) and C16 fit the same noisy observations. The line shows the RMS change in recovered log duration divided by the RMSE of the C16 control. Shading spans four blocks of 512 observations. Open circles identify inconclusive cases.
+**Figure 6.** Event temperature was known (40 °C). The synthetic curves represent part of the MF magnetofossil population near a grain aspect ratio of 1.15, accounting for 13.662% of its modeled single-domain magnetic capacity. Both fits use 12 specimen rotations, a 50 µT event field and a fixed magnetization scale. C16 (16 crystal orientations) supplies the synthetic signal and serves as the operational reference for this comparison. At each of 121 durations per model, C4 (four crystal orientations) and C16 fit the same noisy observations. Panels a and b show F and N1, respectively. The line shows the RMS change in recovered log duration divided by the RMSE of the C16 control. Shading spans four blocks of 512 observations. Open circles identify inconclusive cases. [PDF](examples/mf40/quadrature.pdf)
 
 | Model | Detected quadrature effect | Inconclusive | Durations tested |
 | --- | ---: | ---: | ---: |
@@ -76,7 +76,7 @@ The fit uses 20 sequential vector readings, with the initial remanence followed 
 
 ## Reproduce the figures and the sensitivity test
 
-From a clone of this repository, use CPython 3.14.5. The following commands were tested on macOS arm64.
+Run the following commands from a clone of this repository. The figures were reproduced with CPython 3.14.5 on Linux x86-64.
 
 ```sh
 python3 -m venv .venv
@@ -86,7 +86,7 @@ PYTHONPATH=src:. python examples/model/figures.py
 python examples/mf40/reproduce.py
 ```
 
-Both commands run offline after installation. The first draws Figures 1–5 from the bundled model, saved numerical outputs and analytic estimator test. The second recalculates Figure 6 and the 242-row results table. [Figure inputs and methods](examples/model/README.md) · [Sensitivity test script](examples/mf40/reproduce.py)
+Both commands run offline after installation and write a 300 dpi PNG and a PDF for each figure. The first draws Figures 1–5 from the bundled model, saved numerical outputs and analytic estimator test. The second recalculates Figure 6 and the 242-row results table. [Figure inputs and methods](examples/model/README.md) · [Sensitivity test script](examples/mf40/reproduce.py)
 
 ## Model and tests
 

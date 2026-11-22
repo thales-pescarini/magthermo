@@ -6,7 +6,7 @@ From the repository root, after installing the [requirements](../../requirements
 PYTHONPATH=src:. python examples/model/figures.py
 ```
 
-The script draws five PNG files in this directory. The population and forward panels read saved numerical outputs. The energy panels evaluate the grain model at fixed temperature and field. The inverse panels use the public grid estimator on an analytic signal.
+The script writes five figures in this directory as 300 dpi PNGs and PDFs with editable text. The published figures use Liberation Sans. The [shared style](../nature_style.py) also supports Arial and Helvetica, which can change the exact placement of text. The population and forward panels read saved numerical outputs. The energy panels evaluate the grain model at fixed temperature and field. The inverse panels use the public grid estimator on an analytic signal.
 
 ## Grain and energy landscape
 
@@ -14,7 +14,7 @@ The script draws five PNG files in this directory. The population and forward pa
 
 The magnetite grain has a polar-to-equatorial axis ratio of exp(−0.18), an axis of symmetry parallel to [531], and a 50 µT field along [100] at 80 °C. Figure 1 shows a central section through the short axis and field. The plotted energy differences use [100] as zero for each term. Figure 2 uses the lowest minimum as zero for the entire sphere. The 45 nm volume-equivalent diameter sets both the dimensions of the cross-section and the volume used to convert a saddle height into a thermal barrier. The two states of the first saved connection are labeled A and B.
 
-The disk is a Lambert azimuthal equal-area projection of the lower hemisphere ($u_z\leq0$), centered on the negative crystal z axis. The equator is the unit circle, with [100] to the right and [010] at the top. The projected coordinates are $(u_x,u_y)/\sqrt{1-u_z}$. To draw the white dashed lines, the plot samples the edges of a cube aligned with the crystal axes, normalizes the vectors from its center to those edges and projects the portions in this hemisphere. The two orange paths use the saved descent trajectories. Both stay in the displayed hemisphere. The input file retains the stationary directions of both hemispheres.
+The disk is a Lambert azimuthal equal-area projection of the lower hemisphere ($u_z\leq0$), centered on the negative crystal z axis. The equator is the unit circle, with [100] to the right and [010] at the top. The projected coordinates are $(u_x,u_y)/\sqrt{1-u_z}$. To draw the white dashed lines, the plot samples the edges of a cube aligned with the crystal axes, normalizes the vectors from its center to those edges and projects the portions in this hemisphere. The two red-orange paths use the saved descent trajectories. Both stay in the displayed hemisphere. The input file retains the stationary directions of both hemispheres.
 
 ## Population and forward curves
 

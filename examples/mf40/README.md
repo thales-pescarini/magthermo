@@ -12,7 +12,7 @@ From the repository root, run the following command with the dependencies instal
 python examples/mf40/reproduce.py
 ```
 
-The script writes [results.csv](results.csv) and [quadrature.png](quadrature.png). Use `--output DIRECTORY` to choose another output directory. Each CSV row represents one true duration and one model. The columns give the noiseless fits, counts of tied noisy fits, and the full-sample and block-specific values of the quantities below.
+The script writes [results.csv](results.csv) and the figure as a [PNG](quadrature.png) and a [PDF](quadrature.pdf). Use `--output DIRECTORY` to choose another output directory. Each CSV row represents one true duration and one model. The columns give the noiseless fits, counts of tied noisy fits, and the full-sample and block-specific values of the quantities below.
 
 To redraw the figure from the saved table, run `python examples/mf40/plot_quadrature.py` from the repository root.
 

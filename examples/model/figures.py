@@ -1,27 +1,24 @@
 """Draw the five figures in the model overview.
 Usage from the repository root: PYTHONPATH=src:. python examples/model/figures.py
+Each figure is written as a PNG preview and a vector PDF at final print size.
 """
+import sys
 from pathlib import Path
 
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from grain_landscape import grain_geometry, energy_landscape, read_grain
-from population_response import population, forward_grid
-from inverse_grid import joint_fit
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import nature_style as ns  # noqa: E402
+from grain_landscape import grain_geometry, energy_landscape, read_grain  # noqa: E402
+from population_response import population, forward_grid  # noqa: E402
+from inverse_grid import joint_fit  # noqa: E402
 
 
 def main():
     directory = Path(__file__).resolve().parent
-    plt.rcParams.update({
-        "font.family": "DejaVu Sans", "font.size": 10,
-        "axes.labelcolor": "#263849", "text.color": "#182a3c",
-        "axes.edgecolor": "#637381", "axes.spines.top": False,
-        "axes.spines.right": False, "axes.titlelocation": "left",
-        "axes.titleweight": "semibold", "axes.titlesize": 12,
-        "axes.titlepad": 11, "legend.frameon": False, "savefig.facecolor": "white",
-    })
+    ns.use()
     model, states = read_grain(directory)
     figures = (
         ("grain", grain_geometry(model)),
@@ -31,9 +28,9 @@ def main():
         ("joint_fit", joint_fit()),
     )
     for name, fig in figures:
-        fig.savefig(directory / f"{name}.png", dpi=165, metadata={"Software": None})
+        ns.save(fig, directory / f"{name}.png")
         plt.close(fig)
-        print(f"{name}.png")
+        print(f"{name}.png  {name}.pdf")
 
 
 if __name__ == "__main__":

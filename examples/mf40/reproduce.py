@@ -126,7 +126,7 @@ def recover(protocol, curves16, curves4, noise):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--output", type=Path, default=HERE, help="Directory for results.csv and quadrature.png")
+    parser.add_argument("--output", type=Path, default=HERE, help="Directory for results.csv, quadrature.png and quadrature.pdf")
     args = parser.parse_args()
     protocol = json.loads((HERE / "protocol.json").read_text())
     curves16, curves4, noise = load_inputs(protocol)
