@@ -1,7 +1,14 @@
+# Numerical arrays, solvers and arbitrary-precision arithmetic
 numpy==2.4.6
 scipy==1.17.1
 mpmath==1.4.1
+
+# Thermal protocol and model configuration
 PyYAML==6.0.3
+
+# Bundled SDCC energy routines
 jax==0.10.1
 jaxlib==0.10.1
+
+# Scientific figures
 matplotlib==3.10.9

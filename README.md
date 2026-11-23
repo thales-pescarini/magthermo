@@ -4,108 +4,59 @@ Under what conditions can a vector demagnetization curve from a characterized po
 
 MAGTHERMO uses the single-domain energy-landscape and master-equation approach of the SDCC (Cych et al., 2025, and references therein), with its material laws and demagnetizing factors. Its own components are a stationary-point census for arbitrary internal crystal orientation and continuous shape, transport of occupations through state mergers and splits, integration over measured grain populations and joint temperature–duration recovery.
 
-MAGTHERMO calculates the magnetization of noninteracting, single-domain grains during heating, a hold in an applied field, cooling and subsequent stepwise zero-field demagnetization. For each grain, the model combines cubic magnetocrystalline anisotropy, ellipsoidal shape anisotropy and the Zeeman energy. It locates minima and connecting saddles, evolves the occupation probabilities and sums the magnetic moments in specimen coordinates. Model F retains the full relaxation spectrum. Model N1 uses one relaxation time selected for its contribution to the magnetic signal.
+A short, hot event and a longer, cooler event can leave similar remanent intensities. MAGTHERMO tests whether the direction of the surviving remanence and its decay during laboratory demagnetization can distinguish such thermal histories. It predicts the three components of specimen remanence after each laboratory step and compares the predicted sequence with measurements.
 
-## Grain geometry and anisotropy
+## Single-particle energy landscape
 
-A grain is an ellipsoid of revolution with volume-equivalent diameter $d$. Its symmetry axis can point in any direction relative to the cubic crystal axes. For a unit magnetization direction $\mathbf{u}$ in the crystal frame, the energy per unit volume is
+Each grain is a uniformly magnetized spheroid. For a unit moment direction $\mathbf u$ in crystal coordinates, cubic magnetocrystalline anisotropy, shape anisotropy and the applied field contribute to the energy density.
 
 $$
-e(\mathbf{u}) =
+e(\mathbf u) =
 K_1(u_x^2u_y^2+u_y^2u_z^2+u_z^2u_x^2)
-+K_2u_x^2u_y^2u_z^2
-+\frac{\mu_0 M_s^2}{2} \mathbf{u}^{\mathsf T}N\mathbf{u}
--M_s (\mathbf B\cdot\mathbf u) .
++ K_2 u_x^2u_y^2u_z^2
++ \frac{\mu_0 M_s^2}{2}\mathbf u^{\mathsf T}N\mathbf u
+- M_s\,\mathbf B\cdot\mathbf u .
 $$
 
-The first two terms depend on crystal orientation. The demagnetizing tensor $N$ sets the shape contribution, and the applied field $\mathbf B$ favors alignment with the field. The model evaluates the magnetocrystalline constants $K_1$, $K_2$ and saturation magnetization $M_s$ at the grain temperature.
+The shape and orientation of the spheroid determine its demagnetizing tensor $N$. Temperature sets $K_1$, $K_2$ and the saturation magnetization $M_s$. The solver locates minima on the sphere of moment directions and follows both downhill paths from each first-order saddle to identify the states it connects. For a grain of volume $V$, escape from minimum $i$ through saddle $s$ requires the energy $V(e_s-e_i)$. The corresponding transition rate is proportional to $\exp[-V(e_s-e_i)/(k_B T_{\mathrm{abs}})]$, with absolute temperature in kelvin. A higher temperature increases the escape probability per unit time for a given barrier. A longer hold allows transitions to accumulate. [Single-grain calculations and units](src/README.md)
 
-![Cross-section of an oblate magnetite grain and the change in cubic, shape and Zeeman energies as its moment rotates](examples/model/grain.png)
+![Circular energy landscape in crystal coordinates and energy profiles from a common saddle to two minima](examples/model/landscape.png)
 
-**Figure 1.** An oblate magnetite grain at 80 °C has a short axis parallel to [531] and a 50 µT field along [100]. The section (a) shows a possible moment direction, $\mathbf{u}$. Panels b and c follow one full turn in this plane, relative to the energy at 0°. Panel b shows the cubic, shape and total energy densities in kJ m⁻³. Panel c shows the Zeeman term in J m⁻³. [PDF](examples/model/grain.pdf)
+**Single-domain magnetite grain.** The oblate particle has a volume-equivalent diameter of 45 nm, a polar-to-equatorial diameter ratio of 0.835 and a short axis along [531]. At 80 °C in a 50 µT field along [100], minima A and B share saddle S. Panel (a) shows the lower hemisphere in equal-area projection. Dashed white lines trace the projected edges of the cubic unit cell. Panel (b) shows why the escape barrier depends on which minimum the moment occupies.
 
-## Energy landscape and transitions between states
+## Forward calculation
 
-MAGTHERMO searches the sphere of moment directions for stationary points and classifies them by the two curvatures tangent to the sphere. Minima are stable moment directions. Descending from opposite sides of a first-order saddle identifies the minima it connects. The same saddle can present different barriers to a grain starting in different minima.
+1. **Prepare the grain and apply the thermal event.** Grain size, shape and orientation define the particle. The protocol specifies how to prepare its initial remanence, the applied field, heating and cooling rates, peak temperature and hold time. The solver evolves the probability of occupying each minimum through heating, the isothermal hold and cooling. It transfers occupations when states merge or split under a supported transition rule.
+2. **Simulate the measurement.** After the field is removed, the model records the initial remanence. It carries the occupations through successive zero-field laboratory heating and cooling steps. At each return to the measurement temperature, the grain moment is the occupation-weighted sum of the moments in its stable directions. Model F retains the full relaxation spectrum. N1 approximates the response with one relaxation time selected for its contribution to the magnetic signal.
+3. **Sum the specimen response.** The model rotates each grain moment into specimen coordinates and sums the contributions of noninteracting grains over size, shape, internal crystal orientation and whole-grain rotation. Repeating the calculation over event temperatures $T$ and log durations $\ell=\log_{10}(t/\mathrm{s})$ gives a grid with one predicted vector curve at each node. [Thermal protocols](config/README.md) · [Forward operator](src/general_engine.py) · [Population integration](portao_a/integration.py)
 
-![Circular equal-area energy plot with dashed white cubic edges, two descent paths and barriers across their common saddle](examples/model/landscape.png)
+## Joint inversion
 
-**Figure 2.** Energy landscape of an oblate single-domain magnetite grain with a volume-equivalent diameter of 45 nm. Its polar diameter is 39.9 nm along [531] and its equatorial diameter is 47.8 nm (polar/equatorial ratio 0.835). The grain is at 80 °C in a 50 µT field along [100]. The disk (a) shows the lower crystal hemisphere in an equal-area projection. Dashed white lines trace the projected edges of the cubic unit cell. Red-orange paths descend from saddle S to minima A and B. The full sphere contains four minima, four saddles and two maxima. The barriers through S (b) are 22.4 and 19.4 $k_BT$ from A and B, respectively. [PDF](examples/model/landscape.pdf)
+The estimator takes a complete grid of predicted curves, an observed curve from the same protocol and the standard deviation of each measured component. For PX12, each curve contains the initial remanence and 19 subsequent readings, with $x$, $y$ and $z$ retained at each step. At each candidate $(T,\ell)$, the primary analysis (mode `L1`) minimizes the weighted squared residuals over one nonnegative amplitude $a$ shared by the entire curve.
 
-For grain volume $V$, the barrier from minimum $i$ through saddle $s$ is $V(e_s-e_i)$. Thermal transition rates across the saddles define a master equation for the occupation probabilities. As temperature or field changes, the software tracks the minima and transfers probability through resolved state mergers and splits. The occupations at the end of each step supply the initial state for the next. [Landscape solver](src/r1_landscape.py) · [Occupation transport](src/er2_transport.py)
+$$
+\chi^2(T,\ell)=\min_{a\geq 0}\sum_j
+\left[\frac{y_j-a\,m_j(T,\ell)}{\sigma_j}\right]^2 .
+$$
 
-## From individual grains to a population
+Here $j$ indexes both measurement step and vector component, $y_j$ is the observation and $m_j$ the prediction. If two thermal histories produce proportional curves with the same polarity, a fitted amplitude makes them indistinguishable. Changes in direction or relative decay across steps can separate them. The estimator returns all grid points tied for the minimum. A fixed-scale fit is available when the absolute amplitude is known. [Estimator inputs and usage](portao_a/README.md)
 
-Size, shape and orientation play different roles. Grain volume scales both the activation barrier and the magnetic moment. The shape axis relative to the crystal affects the energy landscape. Rotation of the whole grain relative to the specimen determines how the applied field projects onto the crystal and how the grain moment contributes to the measured vector.
+The grid search and its handling of ambiguity are implemented and tested. The accuracy of joint temperature and duration recovery on the refined population model and on rock specimens remains under evaluation.
 
-![Size and shape contributions to the modeled magnetofossil population and four quadrature cells for internal crystal orientation](examples/model/population.png)
+## Installation and tests
 
-**Figure 3.** The magnetofossil (MF) model uses measured lengths and widths with an assumed prolate geometry. Colors in panel a show the fraction of the parent magnetic capacity in each size and shape bin. The four cells in panel b sample the direction of the shape axis in the crystal. Their weights are fractions of solid angle. The model integrates whole-grain rotations separately, assuming random specimen orientations. [PDF](examples/model/population.pdf)
-
-## Forward curves and the temperature–duration grid
-
-The protocol starts with remanence along specimen $z$. A field of 50 µT along $x$ acts during the thermal event. Heating, the isothermal hold and cooling change the grain occupations. The laboratory sequence then records the initial remanence and the remaining moment after each of 19 zero-field thermal demagnetization steps. All readings are taken at 20 °C. MAGTHERMO sums the grain moments in specimen coordinates, weighted by the modeled population.
-
-![Two modeled vector demagnetization curves linked to their positions on the event temperature and log-duration grid](examples/model/forward_grid.png)
-
-**Figure 4.** At 160 °C, the longer hold leaves less of the initial $z$ remanence (a) and a larger $x$ component along the event field (b). The two marked grid points in panel c correspond to these curves. Color shows only the initial $z$ component. Each of the 14 × 121 grid points contains a full sequence of 20 three-component readings. These saved F-model calculations cover the full retained MF population using 17 shape nodes, 33 diameters per shape, four internal orientations and 12 specimen rotations. They illustrate the forward calculation at this resolution. [Vector curves](examples/model/forward_curves.csv) · [Grid values shown](examples/model/forward_grid.csv) · [PDF](examples/model/forward_grid.pdf)
-
-## Joint inversion of event temperature and duration
-
-For one observed curve, the estimator compares all 60 measured components with their predicted values at every grid point. The primary fit (L1) allows one common nonnegative amplitude for the entire curve. At each temperature and duration it selects the amplitude that minimizes the sum of squared residuals weighted by the inverse component variances. If two predictions differ only by a positive scale factor, L1 cannot distinguish them. Differences in the direction of the remanence or in its decay across the laboratory steps can distinguish the predictions.
-
-![Weighted misfit over temperature and duration for a test with a fitted amplitude and the same test with a fixed amplitude](examples/model/joint_fit.png)
-
-**Figure 5.** An analytic test isolates this ambiguity. Two signal components are proportional to temperature and log duration, respectively. With a fitted amplitude (a), all 14 marked pairs match the same input exactly. Fixing the amplitude (b) gives one optimum at the input pair. The same estimator runs on physical curves. Joint recovery on the refined full-population physical reference and validation on rock specimens remain under evaluation. [Estimator](portao_a/inference.py) · [Estimator tests](portao_a/tests/test_inference.py) · [PDF](examples/model/joint_fit.pdf)
-
-## Crystal quadrature sensitivity at 40 °C
-
-![Effect of crystal orientation quadrature on duration recovery for MF/F and MF/N1](examples/mf40/quadrature.png)
-
-**Figure 6.** Event temperature was known (40 °C). The synthetic curves represent part of the MF magnetofossil population near a grain aspect ratio of 1.15, accounting for 13.662% of its modeled single-domain magnetic capacity. Both fits use 12 specimen rotations, a 50 µT event field and a fixed magnetization scale. C16 (16 crystal orientations) supplies the synthetic signal and serves as the operational reference for this comparison. At each of 121 durations per model, C4 (four crystal orientations) and C16 fit the same noisy observations. Panels a and b show F and N1, respectively. The line shows the RMS change in recovered log duration divided by the RMSE of the C16 control. Shading spans four blocks of 512 observations. Open circles identify inconclusive cases. [PDF](examples/mf40/quadrature.pdf)
-
-| Model | Detected quadrature effect | Inconclusive | Durations tested |
-| --- | ---: | ---: | ---: |
-| F | 120 | 1 | 121 |
-| N1 | 97 | 24 | 121 |
-| Total | 217 | 25 | 242 |
-
-Changing the crystal quadrature affected the recovered duration in this test. The absolute accuracy of duration recovery remains unverified. In later controls on the full MF population at 40 and 300 °C, refining the specimen rotations produced the largest change in the modeled curves among the numerical refinements tested. At 40 °C, the initial remanence along the specimen *z* axis was about 21% higher for N1 and 24–25% higher for F with 12 rotations than with 48.
-
-The fit uses 20 sequential vector readings, with the initial remanence followed by 19 zero-field steps. The example recalculates the estimates from the two saved synthetic curve banks, regenerates the verified noise matrix, and writes the figure and a row for every model and true duration. [Decision rule and data layout](examples/mf40/README.md) · [Physical and numerical settings](examples/mf40/protocol.json) · [Results table](examples/mf40/results.csv)
-
-## Reproduce the figures and the sensitivity test
-
-Run the following commands from a clone of this repository. The figures were reproduced with CPython 3.14.5 on Linux x86-64.
+Use CPython 3.14.5. From the repository root, create a virtual environment, install the pinned dependencies and run both test suites.
 
 ```sh
 python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install -r requirements.txt
-PYTHONPATH=src:. python examples/model/figures.py
-python examples/mf40/reproduce.py
-```
-
-Both commands run offline after installation and write a 300 dpi PNG and a PDF for each figure. The first draws Figures 1–5 from the bundled model, saved numerical outputs and analytic estimator test. The second recalculates Figure 6 and the 242-row results table. [Figure inputs and methods](examples/model/README.md) · [Sensitivity test script](examples/mf40/reproduce.py)
-
-## Model and tests
-
-| Calculation | Implementation |
-| --- | --- |
-| Grain energy and stationary states | [Energy](src/e1_core.py), [energy landscape](src/r1_landscape.py) |
-| Occupation transport and vector response | [Transport](src/er2_transport.py), [relaxation spectrum](src/wp1c_spectral.py), [response](src/er3_response.py) |
-| Population integration | [Shape and size weights](portao_a/population.py), [orientation quadrature](portao_a/quadrature.py), [summation](portao_a/integration.py) |
-| Thermal event and demagnetization | [Protocol](config/protocols.yaml), [chronological operator](src/er3_fast_geometry.py) |
-
-Run the physical-limit, integration and estimator tests from the repository root.
-
-```sh
 PYTHONPATH=src:. python -m unittest discover -s portao_a/tests
 PYTHONPATH=src:. python -m unittest discover -s tests
 ```
 
-To calculate new size and shape weights from the external workbook, install `xlrd==2.0.2` and set `MAGTHERMO_SD_TABLE` to the path of `TM_Crit_Sizes.xls`. The saved-curve example includes its required numerical inputs. [Data sources and file checksums](SOURCES.md)
+[Model figures and numerical tests](examples/README.md) · [Data sources and checksums](SOURCES.md)
 
-## Attribution and licensing
+## Attribution
 
-The forward model uses the material laws and ellipsoidal demagnetizing factors from the Single Domain Comprehensive Calculator (SDCC) by Brendan Cych. Its underlying model is described by Cych, Paterson, Nagy and Williams (2025). Three unmodified SDCC files from v0.4.3 are included. The upstream README and license file specify CC BY-SA 4.0. The accompanying source record documents the conflicting MIT classifier in the package metadata. This release adds no license for original MAGTHERMO code. [SDCC paper](https://doi.org/10.1093/gji/ggaf149) · [Software attribution and source files](SOURCES.md) · [SDCC license](LICENSES/SDCC-CC-BY-SA-4.0.txt)
+MAGTHERMO uses the material laws and demagnetizing factors in Brendan Cych's Single Domain Comprehensive Calculator v0.4.3. The accompanying paper is by Cych, Paterson, Nagy and Williams (2025). Three upstream Python files are included under CC BY-SA 4.0. The original MAGTHERMO code has no declared license. [SDCC paper](https://doi.org/10.1093/gji/ggaf149) · [Bundled implementation](portable_runtime/README.md) · [License scope and text](LICENSES/README.md)
