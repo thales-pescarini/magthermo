@@ -1,4 +1,4 @@
-# Duration recovery at a known event temperature of 40 °C
+# Sensitivity of duration estimates to crystal-orientation quadrature
 
 The MF population represents magnetofossils. The synthetic curves cover a subset of its shape distribution around an aspect ratio of 1.15, representing 13.662% of the single-domain magnetic capacity. Each moment is expressed as a fraction of the full parent population capacity. C4 and C16 integrate over four and sixteen crystal orientations, respectively, with the same 12 specimen rotations, 33 diameters and physical protocol. C16 supplies the synthetic truth curves and serves as the operational reference. Its absolute quadrature error is unknown.
 
@@ -32,3 +32,5 @@ The rule uses the full sample and four consecutive, disjoint blocks of 512. A ca
 ![Paired duration shift divided by the control error](quadrature.png)
 
 **Figure 1.** Duration recovery at a known event temperature of 40 °C, with partial MF support and C16 as the operational reference. The line gives the ratio for all 2,048 observations. The shaded band spans the four block ratios. Open circles mark inconclusive cases. The comparison detects an effect of crystal quadrature in 120 of 121 F cases and 97 of 121 N1 cases. The remaining 25 cases are inconclusive. Temperature recovery was outside the scope of this test.
+
+Later full-population controls at 40 and 300 °C found that refining specimen rotations produced the largest change among the numerical refinements tested. At 40 °C, using 12 rotations instead of 48 increased the initial specimen-$z$ remanence by about 21% for N1 and 24–25% for F. The comparison here measures sensitivity to crystal quadrature conditional on the chosen specimen rotations, fixed amplitude and known event temperature.
