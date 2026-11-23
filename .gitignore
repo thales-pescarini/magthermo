@@ -2,3 +2,10 @@
 __pycache__/
 *.py[cod]
 .DS_Store
+
+# External morphology and single-domain reference data listed in SOURCES.md
+TM_Crit_Sizes.xls
+KR1302-PC6_size.xlsx
+Site777_size.xlsx
+HeklaGrainMetrics.csv
+Compilation_magnetic_shape_parameters.xlsx

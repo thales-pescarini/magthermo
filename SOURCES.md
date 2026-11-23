@@ -17,6 +17,8 @@ The SDCC v0.4.3 README grants Creative Commons Attribution-ShareAlike 4.0 Intern
 
 ## Population measurements and single-domain size limits
 
+To recompute population weights from the original single-domain size workbook, install `xlrd==2.0.2` and set `MAGTHERMO_SD_TABLE` to the local path of `TM_Crit_Sizes.xls`. The [table reader](src/environment.py) also accepts a JSON export with the same sheets. The model figures and the tests on saved curves use bundled inputs.
+
 The MF population uses the grains classified as isotropic in sheet `7-43` of `KR1302-PC6_size.xlsx`. The axisymmetric shape model interprets two-dimensional measurements as a size and shape proxy. The example distributes synthetic demagnetization curves calculated for part of this population. Hekla and Guia are separate populations studied in the wider project.
 
 | Source and use | Original file | Verified SHA-256 |
