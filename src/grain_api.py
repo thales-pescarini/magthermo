@@ -1,7 +1,7 @@
-"""Explicit SI/nm consumer of the frozen energy and sequential scalar executor."""
+"""Evaluate thermal histories for grains specified by size, shape and orientation."""
 import math,time,json,hashlib,copy
 import numpy as np
-import e1_core as core
+import grain_energy as core
 import population_cdf as population
 import thermal_executor as thermal
 
@@ -10,9 +10,9 @@ class GrainExecutor(thermal.Executor):
         d_nm=float(d_nm);s=float(s);c=np.asarray(c,float);R=np.asarray(R,float)
         if c.shape!=(3,) or not np.all(np.isfinite(c)) or abs(np.linalg.norm(c)-1)>1e-12:raise ValueError('c_MUST_BE_UNIT_CRYSTAL_AXIS')
         if R.shape!=(3,3) or not np.all(np.isfinite(R)) or np.max(abs(R.T@R-np.eye(3)))>1e-12 or abs(np.linalg.det(R)-1)>1e-12:raise ValueError('R_MUST_MAP_CRYSTAL_TO_SAMPLE_WITH_DET_PLUS_ONE')
-        if not math.isfinite(s) or abs(s)>population.inherited.SMAX+1e-14:raise ValueError('s_OUTSIDE_FROZEN_SUPPORT')
-        if not math.isfinite(d_nm) or not 5<=d_nm<=population.inherited.sd_limit(s):raise ValueError('d_nm_OUTSIDE_FROZEN_CONDITIONAL_SD_SUPPORT')
-        if TM!=0:raise ValueError('B1_PRESCRIBES_TM00')
+        if not math.isfinite(s) or abs(s)>population.inherited.SMAX+1e-14:raise ValueError('SHAPE_OUTSIDE_SUPPORTED_RANGE')
+        if not math.isfinite(d_nm) or not 5<=d_nm<=population.inherited.sd_limit(s):raise ValueError('DIAMETER_OUTSIDE_SHAPE_DEPENDENT_SD_SUPPORT')
+        if TM!=0:raise ValueError('MAGNETITE_REQUIRED')
         self.s=s;self.c=c.copy();self.R=R.copy();self.d=d_nm;self.Rspec=copy.deepcopy(R_metadata)
         if self.Rspec is not None:
             import mpmath as mp

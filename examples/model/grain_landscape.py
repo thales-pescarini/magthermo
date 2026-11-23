@@ -8,7 +8,7 @@ import numpy as np
 from matplotlib.patches import Circle, Ellipse
 
 import nature_style as ns
-from gate1_verified_methods import riem
+from stationary_points import riem
 
 ENERGY = r"$e - e_\mathrm{min}$ (kJ m$^{-3}$)"
 
@@ -19,7 +19,7 @@ def read_grain(directory):
         # SDCC returns the identity for [100] to [100] after normalizing a zero cross product.
         warnings.filterwarnings("ignore", "invalid value encountered in divide", RuntimeWarning,
                                 module=r"sdcc\.energy$", lineno=417)
-        from e1_core import PointModel
+        from grain_energy import PointModel
 
         model = PointModel(data["log_polar_to_equatorial_ratio"], data["shape_axis_crystal"],
                            data["temperature_C"], data["field_crystal_T"],

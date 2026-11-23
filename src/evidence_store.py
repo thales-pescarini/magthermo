@@ -1,8 +1,8 @@
-"""Self-contained content-addressed evidence, not a production model bank."""
+"""Store and retrieve calculation results by content hash."""
 from pathlib import Path
 import json,hashlib,os
 import numpy as np
-import e1_core as core
+import grain_energy as core
 
 class Store:
     def __init__(self,root):self.root=Path(root);self.folder=self.root/'results/objects';self.folder.mkdir(parents=True,exist_ok=True)

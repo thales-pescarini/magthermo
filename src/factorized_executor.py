@@ -6,7 +6,7 @@ Scalar references do not import or consume a tape, operator or occupation.
 """
 import copy,json,time,hashlib,collections,math
 import numpy as np
-import e1_core as core
+import grain_energy as core
 import thermal_executor as thermal
 from grain_api import GrainExecutor
 

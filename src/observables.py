@@ -121,5 +121,5 @@ def partial_observables(panel, contributions):
                                qualification='no inference to full continuous population; numerical terms remain open'))
     return dict(histories=result, sources=[sources[k] for k in sorted(sources)],
                 summation='math.fsum on the same available reading mask as the coverage reduction',
-                normalization='full frozen denominator; no present-subset renormalization',
+                normalization='full parent denominator',
                 empty_sum_convention='zero denotes sum of no included kernels, never a predicted full-population response')

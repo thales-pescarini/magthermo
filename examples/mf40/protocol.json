@@ -2,14 +2,14 @@
   "population": "MF",
   "known_event_temperature_C": 40,
   "selected_fraction_of_single_domain_capacity": 0.13661972220415536,
-  "moment_unit": "partial population moment divided by full frozen parent capacity",
+  "moment_unit": "partial population moment divided by the magnetic capacity of the full parent population",
   "shape_nodes_log_aspect_ratio": [
     -0.13976194237515863,
     0.13976194237515863
   ],
   "diameter_node_count": 33,
   "specimen_rotation_node_count": 12,
-  "rotation_rule": "F1_R12_EULER_ZYZ_3_2_2_V1",
+  "rotation_rule": "12 specimen rotations on a 3 by 2 by 2 grid of ZYZ Euler angles",
   "crystal_orientations": [
     4,
     16

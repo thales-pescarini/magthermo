@@ -26,7 +26,7 @@ The [forward grid](forward_grid.csv) contains the initial specimen-z component f
 
 ## Joint estimator
 
-The [inversion plot](inverse_grid.py) uses the analytic template from the [estimator tests](../../portao_a/tests/test_inference.py). With event temperature in °C and log duration in log₁₀ seconds, the first two components are T/300 and ℓ/15. The other 58 are zero. The input is the noiseless template at T = 160 °C and ℓ = 6. Each component has weight 1/(0.04)² in the residual sum. Every pair on ℓ = 6T/160 gives a proportional template. Fitting one amplitude gives 14 tied grid minima. Fixing it to one preserves both component magnitudes and gives one minimum. Color shows the increase in weighted squared residuals relative to the best fit. The panels illustrate the effect of fitting an amplitude on parameter identifiability.
+The [inversion plot](inverse_grid.py) uses the analytic template from the [estimator tests](../../magthermo/tests/test_inference.py). With event temperature in °C and log duration in log₁₀ seconds, the first two components are T/300 and ℓ/15. The other 58 are zero. The input is the noiseless template at T = 160 °C and ℓ = 6. Each component has weight 1/(0.04)² in the residual sum. Every pair on ℓ = 6T/160 gives a proportional template. Fitting one amplitude gives 14 tied grid minima. Fixing it to one preserves both component magnitudes and gives one minimum. Color shows the increase in weighted squared residuals relative to the best fit. The panels illustrate the effect of fitting an amplitude on parameter identifiability.
 
 ## Numerical provenance
 

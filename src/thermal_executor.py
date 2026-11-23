@@ -1,21 +1,20 @@
-"""E1-R1 sequential midpoint thermal executor for finite point sentinels.
+"""Propagate a grain through a thermal and magnetic field history with midpoint steps.
 
-Exact field; crystal c and sample R kept separate. Caches contain physical
-parameters and code identities. No population atlas or inverse solver here.
-"""
+The crystal-frame symmetry axis and the rotation into specimen coordinates
+enter the field and energy calculations separately."""
 from pathlib import Path
 import math,time,json,hashlib,copy
 import numpy as np
 import mpmath as mp
 from scipy.optimize import linear_sum_assignment,root
 from scipy.optimize import brentq
-import e1_core as core
-import r1_landscape as ls
-import g1_geometry as geom
+import grain_energy as core
+import energy_landscape as ls
+import precision_geometry as geom
 import population_cdf as population
 
 ROOT=Path(__file__).resolve().parents[1]
-CODE_HASH=hashlib.sha256(b''.join((ROOT/'src'/p).read_bytes() for p in ['e1_core.py','r1_landscape.py','thermal_executor.py','population_cdf.py','g1_geometry.py','grain_api.py','factorized_executor.py','assembly.py'])).hexdigest()
+CODE_HASH=hashlib.sha256(b''.join((ROOT/'src'/p).read_bytes() for p in ['grain_energy.py','energy_landscape.py','thermal_executor.py','population_cdf.py','precision_geometry.py','grain_api.py','factorized_executor.py','assembly.py'])).hexdigest()
 S=4.884610123479026e-13
 
 def checked(p,context):
@@ -125,7 +124,7 @@ class Executor:
     def pm(self,T,B):return core.PointModel(self.s,self.c,float(T),self.R.T@np.asarray(B),0)
 
     def census_levels(self,T,B):
-        policy=json.loads((ROOT/'config/B2_CENSUS_POLICY.json').read_text())
+        policy=json.loads((ROOT/'config/stationary_point_seeds.json').read_text())
         for target in policy['targets']:
             if self.s==target['s'] and np.array_equal(self.c,np.asarray(target['c'])) and np.array_equal(self.R,np.asarray(target['R'])) and np.array_equal(np.asarray(B),np.asarray(target['B_sample_T'])):
                 return tuple(target['seed_pair'])
@@ -337,7 +336,7 @@ class Executor:
             axis=int(np.argmax(abs(self.c)));u=np.eye(3)[axis]
             def curvature(f):
                 pm=self.pm(T0+f*(T1-T0),B0)
-                return 2*geom.axial_A(pm) if geom.applicable(pm) else float(np.linalg.eigvalsh(ls.gate.riem(pm,u)[1])[0])
+                return 2*geom.axial_A(pm) if geom.applicable(pm) else float(np.linalg.eigvalsh(ls.stationary.riem(pm,u)[1])[0])
             ca,cb=curvature(0.),curvature(1.)
             if ca*cb<0:
                 fc,info=brentq(curvature,0.,1.,xtol=max(1e-14,tol*.01),maxiter=64,full_output=True)
@@ -347,11 +346,11 @@ class Executor:
             candidate=min(left['points'],key=lambda p:min(abs(np.array(p['eig']))));u=np.array(candidate['m']);sc=ls.scale(self.pm(T0,B0))
             def F(x):
                 pm=self.pm(T0+x[4]*(T1-T0),B0+x[4]*(B1-B0));v=x[:3];vn=v/np.linalg.norm(v)
-                g=pm.grad_np(v)/sc-x[3]*v;H=ls.gate.riem(pm,vn)[1]/sc
+                g=pm.grad_np(v)/sc-x[3]*v;H=ls.stationary.riem(pm,vn)[1]/sc
                 return np.r_[g,.5*(v@v-1),np.linalg.det(H)]
             pmc=self.pm(T0+lo*(T1-T0),B0+lo*(B1-B0));initial=np.r_[u,u@pmc.grad_np(u)/sc,(lo+hi)/2]
             sol=root(F,initial,tol=1e-11,options={'maxfev':160});res=float(np.linalg.norm(F(sol.x)))
-            fc=float(sol.x[4]);pmc=self.pm(T0+fc*(T1-T0),B0+fc*(B1-B0));eig=np.linalg.eigvalsh(ls.gate.riem(pmc,sol.x[:3]/np.linalg.norm(sol.x[:3]))[1])
+            fc=float(sol.x[4]);pmc=self.pm(T0+fc*(T1-T0),B0+fc*(B1-B0));eig=np.linalg.eigvalsh(ls.stationary.riem(pmc,sol.x[:3]/np.linalg.norm(sol.x[:3]))[1])
             if res<1e-10 and 0<fc<1 and lo-4*tol<fc<hi+4*tol and min(abs(eig))<1e-5:
                 critical=dict(kind='fold_stationary_KKT',fraction=fc,root_direction=sol.x[:3]/np.linalg.norm(sol.x[:3]),KKT_residual=res,eigenvalues=eig,scipy_success=bool(sol.success))
         record=dict(T_segment=[T0,T1],B_segment_T=[B0,B1],fraction_bracket=[lo,hi],
@@ -382,20 +381,20 @@ class Executor:
             anchor_left=ls.enumerate_land(self.pm(Tl0,Bl0),self.census_levels(Tl0,Bl0));al['left_graph']=anchor_left;persist()
             anchor_right=ls.enumerate_land(self.pm(Tr0,Br0),self.census_levels(Tr0,Br0));al['right_graph']=anchor_right;persist()
             continued,consistent=self.stationary_points(Tl0,Bl0,old)
-            same=consistent and ls.gate.same_census(dict(points=continued,counts={k:sum(p['index']==k for p in continued) for k in range(3)}),dict(points=anchor_left.get('points',[]),counts={k:sum(p['index']==k for p in anchor_left.get('points',[])) for k in range(3)}))
+            same=consistent and ls.stationary.same_census(dict(points=continued,counts={k:sum(p['index']==k for p in continued) for k in range(3)}),dict(points=anchor_left.get('points',[]),counts={k:sum(p['index']==k for p in anchor_left.get('points',[])) for k in range(3)}))
             al['continued_old_roots_agree_with_full_left_census']=bool(same)
             if anchor_left['status']=='COMPUTED_VALID' and anchor_right['status']=='COMPUTED_VALID' and same and anchor_left['counts']!=anchor_right['counts']:
                 al['status']='COMPUTED_VALID';break
             al.update(status='NUMERICAL_UNRESOLVED',reason='LATERAL_CENSUS_CONNECTION_OR_TOPOLOGY_NOT_RESOLVED');persist()
         else:
             record['reason']='FINITE_LATERAL_ANCHORS_EXHAUSTED';persist()
-            from a2_census_repair import recover_anchor_censuses
+            from census_refinement import recover_anchor_censuses
             repaired=recover_anchor_censuses(self,T0,B0,T1,B1,old,offsets,record,persist)
             if repaired is None:raise core.Unresolved(record['reason'])
             anchor_left,anchor_right,fl,fr,offset,Tl0,Tr0,Bl0,Br0=repaired
             if self.pm(Tl0,Bl0).identity()!=anchor_left['identity'] or self.pm(Tr0,Br0).identity()!=anchor_right['identity']:
-                raise core.Unresolved('A2_SELECTED_ANCHOR_MODEL_IDENTITY_MISMATCH')
-            record['A2_selected_anchor_model_identity_verified']=True
+                raise core.Unresolved('REFINED_ANCHOR_MODEL_IDENTITY_MISMATCH')
+            record['refined_anchor_model_identity_verified']=True
             record.pop('reason',None)
         record['selected_anchor_offset']=offset
         def continue_side(anchor,f):
@@ -405,7 +404,7 @@ class Executor:
             for j in range(23):
                 if distance<=2*target:break
                 distance/=2;fractions.append(fc+side*distance)
-            if distance>2*target:raise core.Unresolved('B2_LATERAL_24_STEP_CAP')
+            if distance>2*target:raise core.Unresolved('LATERAL_CONTINUATION_24_STEP_CAP')
             fractions.append(f)
             for frac in fractions:
                 pm=self.pm(T0+frac*(T1-T0),B0+frac*(B1-B0));pts,ok=ls.continuous_points(pm,land['points'])
@@ -455,8 +454,8 @@ class Executor:
                     for j in near:P[j,i]=1/len(near)
                     maps.append(dict(old=i,kind='verified_symmetric_reverse',destinations=near,symmetries=group))
                 else:
-                    left_byid={p['point_id']:p for p in anchor_left['minima']}
-                    start=left_byid[oldmin[i]['point_id']]['m']
+                    left_byid={geom.point_key(p['point_id']):p for p in anchor_left['minima']}
+                    start=left_byid[geom.point_key(oldmin[i]['point_id'])]['m']
                     flows=[ls.flow(self.pm(Tr0,Br0),start,anchor_right['minima'],tolr) for tolr in [1e-9,1e-11]]
                     if flows[0]['destination'] is None or flows[0]['destination']!=flows[1]['destination'] or not all(f['energy_monotone_decreasing'] for f in flows):
                         record['reason']='DISAPPEARING_MINIMUM_FLOW_DESTINATION_UNRESOLVED';record['failed_old_minimum']=i;record['flows']=flows
@@ -492,7 +491,7 @@ class Executor:
         return lo,hi,left,right,P
 
     def advance(self,p,old,T0,B0,T1,B1,seconds,label,depth=0):
-        from a3_event_sequence import advance
+        from event_sequence import advance
         return advance(self,p,old,T0,B0,T1,B1,seconds,label,depth)
 
     def ramp(self,p,land,T0,B0,T1,B1,seconds,label):
@@ -501,7 +500,7 @@ class Executor:
         else:n=self.level['field_ramp_substeps']
         for k in range(n):
             a=k/n;b=(k+1)/n
-            from a3_event_sequence import prescribed
+            from event_sequence import prescribed
             p,land=prescribed(self,self.advance,p,land,T0+a*(T1-T0),np.array(B0)+a*(np.array(B1)-B0),T0+b*(T1-T0),np.array(B0)+b*(np.array(B1)-B0),seconds/n,label)
             if k%16==0:self.snapshot(p,land,label,k,n)
         self.cost['ramps']+=time.monotonic()-t

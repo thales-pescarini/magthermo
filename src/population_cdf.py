@@ -1,13 +1,11 @@
-"""Probability-coordinate integration of the unchanged E1 number measure.
+"""Integrate the grain number distribution in probability coordinates.
 
-The scalar reference uses analytic x moments and adaptive integration in s,
-independently of the discrete probability-coordinate rule.
-"""
+The scalar reference uses analytic size moments and adaptive shape integration."""
 import math
 import numpy as np
 from scipy.special import log_ndtr, ndtri_exp
 from scipy.integrate import quad
-import e1_population as inherited
+import population_density as inherited
 
 def interval(a,b):
     """Return log P(a<Z<b), and inverse conditional CDF without tail loss."""
@@ -28,7 +26,7 @@ def interval(a,b):
         return z
     return logmass,quantile
 
-def _r1_nodes_not_used(spec,nd=33,ns=8,nc=6,alignment='isotropic',retain_nodes=False):
+def _direct_probability_nodes(spec,nd=33,ns=8,nc=6,alignment='isotropic',retain_nodes=False):
     t=spec['theta'];sx=t['sigma_ln_d']*math.sqrt(1-t['rho_latent']**2)
     qd,wd=np.polynomial.legendre.leggauss(nd);ud=(qd+1)/2;wd=wd/2
     qs,ws=np.polynomial.legendre.leggauss(ns);us=(qs+1)/2;ws=ws/2

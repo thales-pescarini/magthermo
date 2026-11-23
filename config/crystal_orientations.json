@@ -1,9 +1,9 @@
 {
-  "family": "F1_C_INTERIOR_GEODESIC_MIDPOINT_CENTROID_V1",
+  "family": "INTERIOR_GEODESIC_MIDPOINT_CENTROID_V1",
   "domain_area_sr": 0.2617993877991494,
   "nodes": [
     {
-      "node_id": "F1_CI_GM_L1_N00",
+      "node_id": "CRYSTAL_ROOT0",
       "level": 1,
       "cell_id": "ROOT0",
       "parent_cell_id": "ROOT",
@@ -45,7 +45,7 @@
       "maximum_edge_deg": 27.367805158622687
     },
     {
-      "node_id": "F1_CI_GM_L1_N01",
+      "node_id": "CRYSTAL_ROOT1",
       "level": 1,
       "cell_id": "ROOT1",
       "parent_cell_id": "ROOT",
@@ -87,7 +87,7 @@
       "maximum_edge_deg": 28.300134667112392
     },
     {
-      "node_id": "F1_CI_GM_L1_N02",
+      "node_id": "CRYSTAL_ROOT2",
       "level": 1,
       "cell_id": "ROOT2",
       "parent_cell_id": "ROOT",
@@ -129,7 +129,7 @@
       "maximum_edge_deg": 27.367805158622662
     },
     {
-      "node_id": "F1_CI_GM_L1_N03",
+      "node_id": "CRYSTAL_ROOT3",
       "level": 1,
       "cell_id": "ROOT3",
       "parent_cell_id": "ROOT",
@@ -171,7 +171,7 @@
       "maximum_edge_deg": 28.300134667112392
     },
     {
-      "node_id": "F1_CI_GM_L2_N00",
+      "node_id": "CRYSTAL_ROOT00",
       "level": 2,
       "cell_id": "ROOT00",
       "parent_cell_id": "ROOT0",
@@ -213,7 +213,7 @@
       "maximum_edge_deg": 13.683902579311336
     },
     {
-      "node_id": "F1_CI_GM_L2_N01",
+      "node_id": "CRYSTAL_ROOT01",
       "level": 2,
       "cell_id": "ROOT01",
       "parent_cell_id": "ROOT0",
@@ -255,7 +255,7 @@
       "maximum_edge_deg": 13.812208322010447
     },
     {
-      "node_id": "F1_CI_GM_L2_N02",
+      "node_id": "CRYSTAL_ROOT02",
       "level": 2,
       "cell_id": "ROOT02",
       "parent_cell_id": "ROOT0",
@@ -297,7 +297,7 @@
       "maximum_edge_deg": 13.683902579311365
     },
     {
-      "node_id": "F1_CI_GM_L2_N03",
+      "node_id": "CRYSTAL_ROOT03",
       "level": 2,
       "cell_id": "ROOT03",
       "parent_cell_id": "ROOT0",
@@ -339,7 +339,7 @@
       "maximum_edge_deg": 13.812208322010447
     },
     {
-      "node_id": "F1_CI_GM_L2_N04",
+      "node_id": "CRYSTAL_ROOT10",
       "level": 2,
       "cell_id": "ROOT10",
       "parent_cell_id": "ROOT1",
@@ -381,7 +381,7 @@
       "maximum_edge_deg": 14.150067333556189
     },
     {
-      "node_id": "F1_CI_GM_L2_N05",
+      "node_id": "CRYSTAL_ROOT11",
       "level": 2,
       "cell_id": "ROOT11",
       "parent_cell_id": "ROOT1",
@@ -423,7 +423,7 @@
       "maximum_edge_deg": 14.257738228636102
     },
     {
-      "node_id": "F1_CI_GM_L2_N06",
+      "node_id": "CRYSTAL_ROOT12",
       "level": 2,
       "cell_id": "ROOT12",
       "parent_cell_id": "ROOT1",
@@ -465,7 +465,7 @@
       "maximum_edge_deg": 14.150067333556189
     },
     {
-      "node_id": "F1_CI_GM_L2_N07",
+      "node_id": "CRYSTAL_ROOT13",
       "level": 2,
       "cell_id": "ROOT13",
       "parent_cell_id": "ROOT1",
@@ -507,7 +507,7 @@
       "maximum_edge_deg": 14.257738228636102
     },
     {
-      "node_id": "F1_CI_GM_L2_N08",
+      "node_id": "CRYSTAL_ROOT20",
       "level": 2,
       "cell_id": "ROOT20",
       "parent_cell_id": "ROOT2",
@@ -549,7 +549,7 @@
       "maximum_edge_deg": 13.683902579311365
     },
     {
-      "node_id": "F1_CI_GM_L2_N09",
+      "node_id": "CRYSTAL_ROOT21",
       "level": 2,
       "cell_id": "ROOT21",
       "parent_cell_id": "ROOT2",
@@ -591,7 +591,7 @@
       "maximum_edge_deg": 13.804504833566774
     },
     {
-      "node_id": "F1_CI_GM_L2_N10",
+      "node_id": "CRYSTAL_ROOT22",
       "level": 2,
       "cell_id": "ROOT22",
       "parent_cell_id": "ROOT2",
@@ -633,7 +633,7 @@
       "maximum_edge_deg": 13.68390257931131
     },
     {
-      "node_id": "F1_CI_GM_L2_N11",
+      "node_id": "CRYSTAL_ROOT23",
       "level": 2,
       "cell_id": "ROOT23",
       "parent_cell_id": "ROOT2",
@@ -675,7 +675,7 @@
       "maximum_edge_deg": 13.804504833566774
     },
     {
-      "node_id": "F1_CI_GM_L2_N12",
+      "node_id": "CRYSTAL_ROOT30",
       "level": 2,
       "cell_id": "ROOT30",
       "parent_cell_id": "ROOT3",
@@ -717,7 +717,7 @@
       "maximum_edge_deg": 14.150067333556189
     },
     {
-      "node_id": "F1_CI_GM_L2_N13",
+      "node_id": "CRYSTAL_ROOT31",
       "level": 2,
       "cell_id": "ROOT31",
       "parent_cell_id": "ROOT3",
@@ -759,7 +759,7 @@
       "maximum_edge_deg": 14.150067333556189
     },
     {
-      "node_id": "F1_CI_GM_L2_N14",
+      "node_id": "CRYSTAL_ROOT32",
       "level": 2,
       "cell_id": "ROOT32",
       "parent_cell_id": "ROOT3",
@@ -801,7 +801,7 @@
       "maximum_edge_deg": 14.287594002518835
     },
     {
-      "node_id": "F1_CI_GM_L2_N15",
+      "node_id": "CRYSTAL_ROOT33",
       "level": 2,
       "cell_id": "ROOT33",
       "parent_cell_id": "ROOT3",

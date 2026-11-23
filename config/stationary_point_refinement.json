@@ -1,0 +1,11 @@
+{
+  "version": "FINITE_LATERAL_CENSUS_REFINEMENT_V1",
+  "candidate_pairs": [[12, 24], [24, 48]],
+  "control_pairs": [[24, 48], [48, 96]],
+  "maximum_seed_level": 96,
+  "scope": "Refine the census at the prescribed offsets on either side of a critical point when all offsets have been tried and the stationary-point counts disagree.",
+  "raw_seed_failures": "Individual seed failures are recorded separately from checks on accepted roots, agreement between censuses and saddle connections.",
+  "reference_resolution_metadata_only": true,
+  "refinement_applies_to": "stationary-point seed density at the prescribed offsets",
+  "candidate_cache_may_seed_independent_reference": false
+}

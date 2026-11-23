@@ -24,7 +24,7 @@ The shape and orientation of the spheroid determine its demagnetizing tensor $N$
 
 1. **Prepare the grain and apply the thermal event.** Grain size, shape and orientation define the particle. The protocol specifies how to prepare its initial remanence, the applied field, heating and cooling rates, peak temperature and hold time. The solver evolves the probability of occupying each minimum through heating, the isothermal hold and cooling. It transfers occupations when states merge or split under a supported transition rule.
 2. **Simulate the measurement.** After the field is removed, the model records the initial remanence. It carries the occupations through successive zero-field laboratory heating and cooling steps. At each return to the measurement temperature, the grain moment is the occupation-weighted sum of the moments in its stable directions. Model F retains the full relaxation spectrum. N1 approximates the response with one relaxation time selected for its contribution to the magnetic signal.
-3. **Sum the specimen response.** The model rotates each grain moment into specimen coordinates and sums the contributions of noninteracting grains over size, shape, internal crystal orientation and whole-grain rotation. Repeating the calculation over event temperatures $T$ and log durations $\ell=\log_{10}(t/\mathrm{s})$ gives a grid with one predicted vector curve at each node. [Thermal protocols](config/README.md) · [Forward operator](src/general_engine.py) · [Population integration](portao_a/integration.py)
+3. **Sum the specimen response.** The model rotates each grain moment into specimen coordinates and sums the contributions of noninteracting grains over size, shape, internal crystal orientation and whole-grain rotation. Repeating the calculation over event temperatures $T$ and log durations $\ell=\log_{10}(t/\mathrm{s})$ gives a grid with one predicted vector curve at each node. [Thermal protocols](config/README.md) · [Forward operator](src/general_engine.py) · [Population integration](magthermo/integration.py)
 
 ## Joint inversion
 
@@ -34,7 +34,7 @@ The estimator takes a complete grid of predicted curves, an observed curve from 
 \chi^2(T,\ell) = \min_{a\geq 0}\sum_j \left[\frac{y_j-a\,m_j(T,\ell)}{\sigma_j}\right]^2
 ```
 
-Here $j$ indexes both measurement step and vector component, $y_j$ is the observation and $m_j$ the prediction. If two thermal histories produce proportional curves with the same polarity, a fitted amplitude makes them indistinguishable. Changes in direction or relative decay across steps can separate them. The estimator returns all grid points tied for the minimum. A fixed-scale fit is available when the absolute amplitude is known. [Estimator inputs and usage](portao_a/README.md)
+Here $j$ indexes both measurement step and vector component, $y_j$ is the observation and $m_j$ the prediction. If two thermal histories produce proportional curves with the same polarity, a fitted amplitude makes them indistinguishable. Changes in direction or relative decay across steps can separate them. The estimator returns all grid points tied for the minimum. A fixed-scale fit is available when the absolute amplitude is known. [Estimator inputs and usage](magthermo/README.md)
 
 The grid search and its handling of ambiguity are implemented and tested. The accuracy of joint temperature and duration recovery on the refined population model and on rock specimens remains under evaluation.
 
@@ -46,7 +46,7 @@ Use CPython 3.14.5. From the repository root, create a virtual environment, inst
 python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install -r requirements.txt
-PYTHONPATH=src:. python -m unittest discover -s portao_a/tests
+PYTHONPATH=src:. python -m unittest discover -s magthermo/tests
 PYTHONPATH=src:. python -m unittest discover -s tests
 ```
 

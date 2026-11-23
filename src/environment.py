@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def base_root():
-    return ROOT / "portable_runtime" / "STAGE6_E1_WP0_WP1_2026-10-22"
+    return ROOT / "portable_runtime"
 
 
 def size_table():

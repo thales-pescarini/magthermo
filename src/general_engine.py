@@ -1,22 +1,20 @@
-"""R1 E development engine using the unchanged all-state physical reference.
+"""Compute single-grain thermal histories for the full and single-mode relaxation models.
 
-History anchors are explicit. F/N1 share geometry and spectra but never states.
-Geometrical tapes contain no magnetic propagation; duration changes only the
-event-hold propagator. Failed tapes are retained and cannot count as complete.
-"""
+The models share geometry and spectra while maintaining separate occupations.
+The duration parameter changes the propagator for the isothermal event hold."""
 import copy
 import hashlib
 import json
 import math
 import time
 import numpy as np
-import e1_core as core
+import grain_energy as core
 import thermal_executor as thermal
-import r1_landscape as landscape
-import g1_geometry as geometry
+import energy_landscape as landscape
+import precision_geometry as geometry
 from scipy.optimize import linear_sum_assignment
 from factorized_executor import GeometryTape, SharedCaches
-from wp1c_spectral import spectral_F, observer
+from relaxation_spectrum import spectral_F, observer
 
 
 def spectral_graph_key(graph):
@@ -306,7 +304,7 @@ class GeneralTape(GeometryTape):
         except core.Unresolved as exc:
             if str(exc) not in {
                 'LATERAL_ROOT_CONTINUATION_UNRESOLVED','FINITE_LATERAL_ANCHORS_EXHAUSTED',
-                'B2_LATERAL_24_STEP_CAP','CRITICAL_ROOT_NOT_RESOLVED',
+                'LATERAL_CONTINUATION_24_STEP_CAP','CRITICAL_ROOT_NOT_RESOLVED',
                 'EVENT_HAS_NO_DEMONSTRATED_SIGNED_CURVATURE_BRACKET',
             }:raise
             original_error=exc
@@ -325,7 +323,7 @@ class GeneralTape(GeometryTape):
             raise original_error
         self.rollback_transaction(token)
         del self.events[events_at:];del self.trace[trace_at:];self.steps=steps_at
-        from a3_event_sequence import rollback_original_trial
+        from event_sequence import rollback_original_trial
         rollback_original_trial(self)
         # Only an already identified maximum/saddle fold may be bypassed in
         # this bounded retry. A minimum/saddle hint remains compulsory.
@@ -354,7 +352,7 @@ class GeneralTape(GeometryTape):
                 if not any(hint is present for present in self.critical_catalog):self.critical_catalog.append(hint)
 
     def failure_evidence(self):
-        return dict(actions=self.actions,events=self.events,initial_p=self.initial_p,a3_sequence_audit=getattr(self,'a3_sequence_audit',[]),
+        return dict(actions=self.actions,events=self.events,initial_p=self.initial_p,event_sequence_history=getattr(self,'event_sequence_history',[]),
                     geometry_cost_s=self.cost,diagnostic=getattr(self,'diagnostic',None),
                     minimum_branch_proofs=self.minimum_branch_proofs,
                     reference_partition_failures=self.reference_partition_failures,
@@ -364,7 +362,7 @@ class GeneralTape(GeometryTape):
 
     def compile(self,protocol='P12'):
         result=super().compile(protocol)
-        result['a3_sequence_audit']=getattr(self,'a3_sequence_audit',[])
+        result['event_sequence_history']=getattr(self,'event_sequence_history',[])
         result['minimum_branch_proofs']=self.minimum_branch_proofs
         result['reference_partition_failures']=self.reference_partition_failures
         result['partition_policy']='reference_first_minimum_recovery_after_failure'

@@ -3,8 +3,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import nature_style as ns
-from portao_a.inference import GridEstimator
-from portao_a.inference_modes import FIXED_SCALE, L1
+from magthermo.inference import GridEstimator
+from magthermo.inference_modes import FIXED_SCALE, L1
 
 
 def joint_fit():
