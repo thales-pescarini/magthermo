@@ -6,7 +6,6 @@ import matplotlib.patheffects as effects
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.patches import Circle, Ellipse
-from scipy.constants import Boltzmann
 
 import nature_style as ns
 from gate1_verified_methods import riem
@@ -117,8 +116,63 @@ def cubic_edges(ax):
     return line
 
 
+def angular_steps(directions):
+    before, after = directions[:-1], directions[1:]
+    return np.arctan2(np.linalg.norm(np.cross(before, after), axis=1),
+                      np.einsum("ij,ij->i", before, after))
+
+
+def descent_directions(saddle, saved, minimum):
+    """Sample the short spherical arcs between consecutive descent nodes."""
+    np.testing.assert_allclose(saved[-1], minimum, rtol=0, atol=1e-6)
+    nodes = np.vstack((saddle, saved, minimum))
+    nodes /= np.linalg.norm(nodes, axis=1, keepdims=True)
+    pieces = [nodes[:1]]
+    for start, end, angle in zip(nodes[:-1], nodes[1:], angular_steps(nodes), strict=True):
+        if angle == 0.:
+            continue
+        count = max(1, int(np.ceil(np.degrees(angle) / .25)))
+        t = np.arange(1, count + 1)[:, None] / count
+        part = (np.sin((1 - t) * angle) * start + np.sin(t * angle) * end) / np.sin(angle)
+        pieces.append(part)
+    return np.vstack(pieces)
+
+
+def grain_directions(ax, model):
+    """Show the applied field and the long diameters of the illustrated oblate grain."""
+    field = model.B / np.linalg.norm(model.B)
+    rim = lower_hemisphere_xy(field)
+    ax.annotate("", xy=rim, xytext=.68 * rim, zorder=8,
+                arrowprops=dict(arrowstyle="-|>", mutation_scale=11, color=ns.BLACK,
+                                lw=1.2, shrinkA=0, shrinkB=0,
+                                path_effects=[effects.withStroke(linewidth=2.6, foreground="white")]))
+    ns.halo_label(ax, "Field [100]", rim, xytext=(0, 6), ha="right",
+                  textcoords="offset points", fontsize=6.5, zorder=8)
+
+    # The lower half of the equatorial great circle spans all unoriented long diameters.
+    horizontal = np.cross([0., 0., 1.], model.c)
+    horizontal /= np.linalg.norm(horizontal)
+    downward = np.cross(horizontal, model.c)
+    angle = np.linspace(0., np.pi, 241)[:, None]
+    equator = np.cos(angle) * horizontal + np.sin(angle) * downward
+    x, y = lower_hemisphere_xy(equator).T
+    plane_color = "#784078"
+    plane, = ax.plot(x, y, color=plane_color, ls=(0, (5, 2)), lw=.9, zorder=4)
+    plane.set_path_effects([effects.withStroke(linewidth=1.7, foreground="white")])
+
+    diameter = np.cross(model.c, field)
+    diameter /= np.linalg.norm(diameter)
+    if diameter[2] > 0.:
+        diameter = -diameter
+    xy = lower_hemisphere_xy(diameter)
+    ax.scatter(*xy, s=23, marker="s", color=plane_color, edgecolor="white", lw=.7, zorder=7)
+    ns.halo_label(ax, r"Long diameter $[0\,1\,\overline{3}]$", xy, xytext=(-6, -8),
+                  ha="right", textcoords="offset points", fontsize=6.2, zorder=8)
+    return plane
+
+
 def energy_landscape(model, data):
-    fig = plt.figure(figsize=(ns.DOUBLE, 84 * ns.MM), layout="constrained")
+    fig = plt.figure(figsize=(ns.DOUBLE, 91 * ns.MM), layout="constrained")
     grid = fig.add_gridspec(1, 2, width_ratios=(1.3, 1.))
     disk = fig.add_subplot(grid[0])
     barrier = fig.add_subplot(grid[1])
@@ -142,9 +196,9 @@ def energy_landscape(model, data):
     disk.plot([0, 0], [-1, 1], lw=.35, color=ns.INK_SOFT)
     wire = cubic_edges(disk)
     disk.add_patch(Circle((0, 0), 1., fill=False, ec=ns.BLACK, lw=.6, zorder=4))
-    disk.text(1.03, 0, "[100]", va="center", fontsize=6)
+    plane = grain_directions(disk, model)
     disk.text(0., 1.03, "[010]", ha="center", va="bottom", fontsize=6)
-    disk.set(xlim=(-1.06, 1.2), ylim=(-1.04, 1.12), aspect="equal")
+    disk.set(xlim=(-1.05, 1.05), ylim=(-1.04, 1.12), aspect="equal")
     disk.set_axis_off()
 
     indices = np.array([p["index"] for p in points])
@@ -160,39 +214,36 @@ def energy_landscape(model, data):
     channel = data["connections"][0]
     a, b = channel["minima"]
     saddle = channel["saddle"]
-    for path, minimum in zip(channel["descent_paths"], (a, b), strict=True):
-        path = np.asarray(path)
-        np.testing.assert_allclose(path[-1], u[minimum], rtol=0, atol=1e-6)
-        path = path / np.linalg.norm(path, axis=1, keepdims=True)
-        px, py = lower_hemisphere_xy(path).T
-        descent, = disk.plot(px, py, color=ns.VERMILION, lw=1.1, zorder=5, solid_capstyle="round")
+    branch_a, branch_b = [descent_directions(u[saddle], path, u[minimum])
+                          for path, minimum in zip(channel["descent_paths"], (a, b), strict=True)]
+    path = np.vstack((branch_a[::-1], branch_b[1:]))
+    px, py = lower_hemisphere_xy(path).T
+    descent, = disk.plot(px, py, color=ns.VERMILION, lw=1.1, zorder=5, solid_capstyle="round")
     ids = [a, saddle, b]
     for idx, label in zip(ids, ("A", "S", "B")):
         ns.halo_label(disk, label, lower_hemisphere_xy(u[idx]), xytext=(4, 3.5),
                       textcoords="offset points", zorder=7)
-    disk.legend([*markers, wire, descent], ["Minimum", "Saddle", "Maximum", "Cubic edges", "Descent path"],
-                loc="upper center", bbox_to_anchor=(.5, .0), ncols=5, handlelength=1.4, columnspacing=1.,
-                handletextpad=.35, borderaxespad=0.)
-    ns.colorbar(fig, surface, disk, ENERGY, shrink=.62, ticks=[0, 3, 6, 9, 12])
+    disk.legend([*markers, wire, descent, plane],
+                ["Minimum", "Saddle", "Maximum", "Cubic edges", "Transition path", "Equatorial plane"],
+                loc="upper center", bbox_to_anchor=(.5, .0), ncols=3, handlelength=1.7,
+                columnspacing=1., handletextpad=.4, borderaxespad=0.)
+    ns.colorbar(fig, surface, disk, ENERGY, shrink=.64, ticks=[0, 3, 6, 9, 12])
 
-    heights = (energies[ids] - energies.min()) / 1000
-    volume = np.pi / 6 * (45e-9)**3
-    delta = (energies[saddle] - energies[[a, b]]) * volume / (Boltzmann * (model.T+273.15))
-    for x, y, color in zip(range(3), heights, (ns.BLACK, ns.ORANGE, ns.BLACK)):
-        barrier.hlines(y, x-.30, x+.30, colors=color, lw=1.6)
-    for left, right, dx, y, value in [(0, 1, .45, heights[0], delta[0]),
-                                      (1, 2, 1.55, heights[2], delta[1])]:
-        barrier.hlines(heights[1], left+.2, right-.2, color=ns.RULE, ls=(0, (1, 1.5)), lw=.6)
-        barrier.annotate("", (dx, heights[1]), (dx, y),
-                         arrowprops=dict(arrowstyle="<|-|>", mutation_scale=5, color=ns.BLACK, lw=.5,
-                                         shrinkA=0, shrinkB=0))
-        barrier.text(dx, (y+heights[1])/2, f"{value:.1f} " + r"$k_\mathrm{B}T$",
-                     ha="center", va="center",
-                     bbox=dict(facecolor="white", edgecolor="none", pad=1.2))
-    barrier.set(xlim=(-.48, 2.48), ylim=(-.11, heights[1]*1.19), xticks=[0, 1, 2],
-                xticklabels=["Minimum A", "Saddle S", "Minimum B"], ylabel=ENERGY)
-    barrier.spines["bottom"].set_visible(False)
-    barrier.tick_params(axis="x", length=0, pad=3)
+    distance = np.degrees(np.r_[0., np.cumsum(angular_steps(path))])
+    profile = (np.array([model.energy_np(v) for v in path]) - energies.min()) / 1000
+    stations = [0, len(branch_a) - 1, len(path) - 1]
+    np.testing.assert_allclose(profile[stations], (energies[ids] - energies.min()) / 1000,
+                               rtol=0, atol=1e-9)
+    barrier.plot(distance, profile, color=ns.VERMILION, lw=1.45)
+    for k, label in zip(stations, ("A", "S", "B"), strict=True):
+        is_saddle = label == "S"
+        barrier.scatter(distance[k], profile[k], marker="D" if is_saddle else "o",
+                        s=18, facecolor=ns.ORANGE if is_saddle else ns.BLACK,
+                        edgecolor=ns.BLACK, lw=.5, zorder=3)
+        barrier.annotate(label, (distance[k], profile[k]), xytext=(0, 6),
+                         textcoords="offset points", ha="center", fontsize=7)
+    barrier.set(xlabel="Angular distance along path (°)", ylabel=ENERGY,
+                ylim=(-.10, 1.18 * profile.max()))
     for ax, letter in zip((disk, barrier), "ab"):
         ns.panel_label(ax, letter)
     return fig

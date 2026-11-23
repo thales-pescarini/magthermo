@@ -8,21 +8,17 @@ A short, hot event and a longer, cooler event can leave similar remanent intensi
 
 ## Single-particle energy landscape
 
-Each grain is a uniformly magnetized spheroid. For a unit moment direction $\mathbf u$ in crystal coordinates, cubic magnetocrystalline anisotropy, shape anisotropy and the applied field contribute to the energy density.
+Each grain is a uniformly magnetized spheroid. For a unit moment direction $\mathbf{u}$ in crystal coordinates, cubic magnetocrystalline anisotropy, shape anisotropy and the applied field contribute to the energy density.
 
-$$
-e(\mathbf u) =
-K_1(u_x^2u_y^2+u_y^2u_z^2+u_z^2u_x^2)
-+ K_2 u_x^2u_y^2u_z^2
-+ \frac{\mu_0 M_s^2}{2}\mathbf u^{\mathsf T}N\mathbf u
-- M_s\,\mathbf B\cdot\mathbf u .
-$$
+```math
+e(\mathbf{u}) = K_1(u_x^2u_y^2 + u_y^2u_z^2 + u_z^2u_x^2) + K_2 u_x^2u_y^2u_z^2 + \frac{\mu_0 M_s^2}{2}\,\mathbf{u}^{\mathsf{T}} N \mathbf{u} - M_s\,\mathbf{B}\cdot\mathbf{u}
+```
 
 The shape and orientation of the spheroid determine its demagnetizing tensor $N$. Temperature sets $K_1$, $K_2$ and the saturation magnetization $M_s$. The solver locates minima on the sphere of moment directions and follows both downhill paths from each first-order saddle to identify the states it connects. For a grain of volume $V$, escape from minimum $i$ through saddle $s$ requires the energy $V(e_s-e_i)$. The corresponding transition rate is proportional to $\exp[-V(e_s-e_i)/(k_B T_{\mathrm{abs}})]$, with absolute temperature in kelvin. A higher temperature increases the escape probability per unit time for a given barrier. A longer hold allows transitions to accumulate. [Single-grain calculations and units](src/README.md)
 
-![Circular energy landscape in crystal coordinates and energy profiles from a common saddle to two minima](examples/model/landscape.png)
+![Lower-hemisphere energy landscape showing the field and long-diameter orientations, with an energy profile along the path from A through S to B](examples/model/landscape.png)
 
-**Single-domain magnetite grain.** The oblate particle has a volume-equivalent diameter of 45 nm, a polar-to-equatorial diameter ratio of 0.835 and a short axis along [531]. At 80 °C in a 50 µT field along [100], minima A and B share saddle S. Panel (a) shows the lower hemisphere in equal-area projection. Dashed white lines trace the projected edges of the cubic unit cell. Panel (b) shows why the escape barrier depends on which minimum the moment occupies.
+**Single-domain magnetite grain.** The oblate particle has a volume-equivalent diameter of 45 nm, a polar-to-equatorial diameter ratio of 0.835 and a short axis along [531]. In panel (a), the arrow shows the 50 µT field applied along [100] at 80 °C. All diameters in the plane perpendicular to [531] are equally long. The projected plane and one representative long diameter, [0 1 −3], show their orientation relative to the dashed white edges of the cubic unit cell. Panel (b) follows the energy density continuously from minimum A over saddle S to minimum B. The horizontal axis is cumulative angular distance along the path shown in (a).
 
 ## Forward calculation
 
@@ -34,10 +30,9 @@ The shape and orientation of the spheroid determine its demagnetizing tensor $N$
 
 The estimator takes a complete grid of predicted curves, an observed curve from the same protocol and the standard deviation of each measured component. For PX12, each curve contains the initial remanence and 19 subsequent readings, with $x$, $y$ and $z$ retained at each step. At each candidate $(T,\ell)$, the primary analysis (mode `L1`) minimizes the weighted squared residuals over one nonnegative amplitude $a$ shared by the entire curve.
 
-$$
-\chi^2(T,\ell)=\min_{a\geq 0}\sum_j
-\left[\frac{y_j-a\,m_j(T,\ell)}{\sigma_j}\right]^2 .
-$$
+```math
+\chi^2(T,\ell) = \min_{a\geq 0}\sum_j \left[\frac{y_j-a\,m_j(T,\ell)}{\sigma_j}\right]^2
+```
 
 Here $j$ indexes both measurement step and vector component, $y_j$ is the observation and $m_j$ the prediction. If two thermal histories produce proportional curves with the same polarity, a fitted amplitude makes them indistinguishable. Changes in direction or relative decay across steps can separate them. The estimator returns all grid points tied for the minimum. A fixed-scale fit is available when the absolute amplitude is known. [Estimator inputs and usage](portao_a/README.md)
 
