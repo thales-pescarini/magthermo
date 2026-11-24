@@ -139,7 +139,7 @@ def descent_directions(saddle, saved, minimum):
 
 
 def grain_directions(ax, model):
-    """Show the applied field and the long diameters of the illustrated oblate grain."""
+    """Show the applied field and the equatorial plane of the oblate grain."""
     field = model.B / np.linalg.norm(model.B)
     rim = lower_hemisphere_xy(field)
     ax.annotate("", xy=rim, xytext=.68 * rim, zorder=8,
@@ -156,18 +156,9 @@ def grain_directions(ax, model):
     angle = np.linspace(0., np.pi, 241)[:, None]
     equator = np.cos(angle) * horizontal + np.sin(angle) * downward
     x, y = lower_hemisphere_xy(equator).T
-    plane_color = "#784078"
-    plane, = ax.plot(x, y, color=plane_color, ls=(0, (5, 2)), lw=.9, zorder=4)
+    plane, = ax.plot(x, y, color="#784078", ls=(0, (5, 2)), lw=.9, zorder=4)
     plane.set_path_effects([effects.withStroke(linewidth=1.7, foreground="white")])
 
-    diameter = np.cross(model.c, field)
-    diameter /= np.linalg.norm(diameter)
-    if diameter[2] > 0.:
-        diameter = -diameter
-    xy = lower_hemisphere_xy(diameter)
-    ax.scatter(*xy, s=23, marker="s", color=plane_color, edgecolor="white", lw=.7, zorder=7)
-    ns.halo_label(ax, r"Long diameter $[0\,1\,\overline{3}]$", xy, xytext=(-6, -8),
-                  ha="right", textcoords="offset points", fontsize=6.2, zorder=8)
     return plane
 
 
